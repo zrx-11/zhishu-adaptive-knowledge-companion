@@ -61,6 +61,27 @@ def _inline(text):
     return text
 
 
+def _split_table_row(text):
+    """按表格分隔符切分，但忽略公式内与转义的竖线。"""
+    s = text.strip()
+    if s.startswith("|"):
+        s = s[1:]
+    if s.endswith("|") and not s.endswith("\\|"):
+        s = s[:-1]
+    cells, cur, in_math, i = [], [], False, 0
+    while i < len(s):
+        ch = s[i]
+        if ch == "\\" and i + 1 < len(s):
+            cur.append(ch); cur.append(s[i + 1]); i += 2; continue
+        if ch == "$":
+            in_math = not in_math; cur.append(ch); i += 1; continue
+        if ch == "|" and not in_math:
+            cells.append("".join(cur).strip()); cur = []; i += 1; continue
+        cur.append(ch); i += 1
+    cells.append("".join(cur).strip())
+    return cells
+
+
 def _is_raw_open(line):
     m = re.match(r"^\s*</?([a-zA-Z0-9]+)", line)
     return m and m.group(1).lower() in ALLOWED_RAW_TAGS
@@ -201,11 +222,11 @@ def md_to_html(md_text):
         if stripped.startswith("|") and i + 1 < n and re.match(r"^\s*\|?[\s:\-|]+\|?\s*$", lines[i + 1]):
             flush_para(para)
             close_lists()
-            header = [c.strip() for c in stripped.strip("|").split("|")]
+            header = _split_table_row(stripped)
             rows = []
             j = i + 2
             while j < n and lines[j].strip().startswith("|"):
-                rows.append([c.strip() for c in lines[j].strip().strip("|").split("|")])
+                rows.append(_split_table_row(lines[j]))
                 j += 1
             tbl = ["<table><thead><tr>"]
             for c in header:
@@ -298,6 +319,38 @@ def _depth_fragment_html(data, concept):
             f'<div class="depth-body">{frag_html}</div>'
             f'</details>')
 
+
+def _load_synonyms(*dirs):
+    """读取同义词组：技能自带 references/synonyms.json + 各书目录下可选 synonyms.json。
+    返回 [[词,词,...], ...]，组内两两互查；不足两词的组丢弃。"""
+    groups, seen = [], set()
+    base = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "references", "synonyms.json")
+    paths = [base] + [os.path.join(d, "synonyms.json") for d in dirs if d]
+    for p in paths:
+        if not os.path.exists(p):
+            continue
+        try:
+            obj = json.load(open(p, encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(obj, dict):
+            continue
+        for _, v in obj.items():
+            if not isinstance(v, list):
+                continue
+            g = []
+            for x in v:
+                s = str(x).strip()
+                if s and s not in g:
+                    g.append(s)
+            if len(g) < 2:
+                continue
+            key = tuple(sorted(g))
+            if key in seen:
+                continue
+            seen.add(key)
+            groups.append(g)
+    return groups
 
 def build_html(data):
     pages = data["pages"]
@@ -422,6 +475,7 @@ def build_html(data):
     html_str = html_str.replace("__TITLE__", _escape(manifest.get("title", "知枢学习伴侣")))
     html_str = html_str.replace("__SUBTITLE__", _escape(manifest.get("subtitle", "")))
     html_str = html_str.replace("__DATA_JSON__", payload)
+    html_str = html_str.replace("__SYN_GROUPS__", json.dumps(_load_synonyms(data.get("base_dir")), ensure_ascii=False).replace("</", "<\\/"))
     return html_str
 
 
@@ -516,6 +570,7 @@ _SHELL = r"""<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
 <title>__TITLE__</title>
 <link rel="stylesheet" href="https://registry.npmmirror.com/katex/0.16.9/files/dist/katex.min.css">
 <link rel="stylesheet" href="https://registry.npmmirror.com/picocss/2.0.6/dist/css/pico.min.css">
@@ -551,7 +606,7 @@ a:hover{text-decoration:underline}
 .nav-item.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
 .nav-item .done{float:right;color:var(--ok);font-size:12px}
 #nav-toggle{display:none}
-.main{flex:1;min-width:0;padding:28px 40px 80px;max-width:920px}
+.main{flex:1;min-width:0;padding:28px 40px 80px;max-width:920px;margin:0 auto}
 .page h1{font-size:26px;border-bottom:2px solid var(--border);padding-bottom:8px;margin-top:0}
 .page h2{font-size:20px;margin-top:26px}
 .page h3{font-size:17px;margin-top:22px}
@@ -624,9 +679,20 @@ svg{max-width:100%;height:auto}
 #glossary-filter{width:100%;max-width:380px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);margin-bottom:10px}
 #glossary-list li{padding:6px 0;border-bottom:1px dashed var(--border)}
 .glossary-ref{color:var(--muted);font-size:12px}
-.search-hit{margin:10px 0}
+.search-hit{margin:6px 0}
+.search-group{margin:18px 0}
+.grp-head{font-size:13px;font-weight:600;color:var(--muted);border-bottom:1px solid var(--border);padding-bottom:5px;margin-bottom:4px}
+.grp-count{margin-left:6px;font-weight:400;opacity:.75}
+.syn-note{display:inline-block;margin-left:8px;padding:1px 6px;border-radius:4px;background:var(--accent-soft);color:var(--muted);font-size:12px;vertical-align:middle}
+.search-hit mark,.hl{background:#fde68a;color:inherit;padding:0 1px;border-radius:2px}
+.hit-hl{background:#fbbf24;color:inherit;border-radius:3px;box-shadow:0 0 0 2px #fde68a}
+.hit-flash{animation:hitFlash 1.8s ease-out}
+@keyframes hitFlash{from{background:#f59e0b}to{background:#fbbf24}}
+[data-theme="dark"] .search-hit mark,[data-theme="dark"] .hl{background:#92400e;color:#fef3c7}
+[data-theme="dark"] .hit-hl{background:#b45309;color:#fff;box-shadow:0 0 0 2px #78350f}
 .topbar{position:sticky;top:0;background:var(--bg);padding:8px 0;display:flex;justify-content:flex-end;z-index:10}
 #theme-btn{border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:8px;padding:5px 12px;cursor:pointer;white-space:nowrap}
+#progress-export,#progress-import{border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:8px;padding:5px 10px;cursor:pointer;font-size:13px;white-space:nowrap;margin-right:8px}
 #progress-bar{height:5px;background:var(--border);border-radius:3px;margin:8px 0;overflow:hidden}
 #progress-bar>div{height:100%;width:0;background:var(--accent);transition:width .3s}
 .empty{color:var(--muted);padding:20px 0}
@@ -639,9 +705,17 @@ svg{max-width:100%;height:auto}
 .diag-remedy-item{padding:10px;margin:8px 0;background:var(--accent-soft);border-radius:8px;font-size:14px}
 @media print{.sidebar,.topbar,.quiz-actions,.card-actions,.card-controls,.diag-controls{display:none!important}.main{max-width:none;padding:0}}
 @media (max-width:760px){.sidebar{width:100%;height:auto;position:static;padding:10px 14px}
-  #nav{display:none}.sidebar.open #nav{display:block}
+  #nav{display:none;max-height:46vh;overflow-y:auto;overscroll-behavior:contain}.sidebar.open #nav{display:block}
+  .nav-item{padding:9px 10px}
+  #q,#glossary-filter{font-size:16px}
+  .quiz-opts label{padding:8px 0;min-height:30px}
+  .quiz-check{padding:10px 18px;min-height:40px}
+  #diag-start{min-height:40px}
+  .card-actions button{min-height:40px}
   #nav-toggle{display:block;width:100%;padding:8px 10px;margin:4px 0;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;text-align:left;cursor:pointer}
-  .layout{flex-direction:column}.main{padding:16px}}
+  .layout{flex-direction:column}.main{padding:20px 18px 64px;max-width:none;width:100%}
+  .page{overflow-wrap:anywhere}.page table{display:block;overflow-x:auto;max-width:100%}
+  .page h1,.page h2,.page h3{line-height:1.35}}
 </style>
 </head>
 <body>
@@ -655,7 +729,7 @@ svg{max-width:100%;height:auto}
     <nav id="nav"></nav>
   </aside>
   <main class="main">
-    <div class="topbar"><button id="theme-btn">🌙 深色</button></div>
+    <div class="topbar"><button id="progress-export">⬇ 导出进度</button><button id="progress-import">⬆ 导入进度</button><button id="theme-btn">🌙 深色</button><input type="file" id="progress-file" accept="application/json" hidden></div>
     <div id="view" class="page"></div>
   </main>
 </div>
@@ -663,6 +737,7 @@ svg{max-width:100%;height:auto}
 const DATA = __DATA_JSON__;
 const pages = DATA.rendered;
 const manifest = DATA.manifest;
+const SYN_GROUPS = __SYN_GROUPS__;
 const $ = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -671,6 +746,36 @@ const store = {
   get(k){ try{ return JSON.parse(localStorage.getItem(SLUG+':'+k)||'null') }catch(e){ return null } },
   set(k,v){ try{ localStorage.setItem(SLUG+':'+k, JSON.stringify(v)) }catch(e){} }
 };
+const ZS_VERSION = '1.4.0';
+/* ---------- 进度导出 / 导入（跨设备） ---------- */
+function exportProgress(){
+  const data = {};
+  for(let i=0;i<localStorage.length;i++){
+    const k = localStorage.key(i);
+    if(k && k.indexOf(SLUG+':')===0) data[k]=localStorage.getItem(k);
+  }
+  const payload = {app:'zhishu', skillVersion:ZS_VERSION, kind:'companion', exportedAt:new Date().toISOString(), prefix:SLUG+':', data};
+  const blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (SLUG||'book')+'-progress-'+new Date().toISOString().slice(0,10)+'.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+}
+function importProgress(file){
+  const fr = new FileReader();
+  fr.onload = () => {
+    try{
+      const p = JSON.parse(fr.result);
+      if(!p || p.app!=='zhishu' || !p.data || typeof p.data!=='object') throw new Error('不是知枢进度文件');
+      let n = 0;
+      Object.keys(p.data).forEach(k=>{ if(k.indexOf(SLUG+':')===0){ localStorage.setItem(k, p.data[k]); n++; } });
+      if(!n){ alert('这个文件里没有属于本书的进度（slug 不一致）'); return; }
+      alert('已导入 '+n+' 条进度，页面将刷新'); location.reload();
+    }catch(e){ alert('导入失败：'+e.message); }
+  };
+  fr.readAsText(file);
+}
 let state = { visited: store.get('visited')||[], quiz: store.get('quiz')||{}, cards: store.get('cards')||{}, mastery: store.get('mastery')||{} };
 
 /* ---------- 导航 ---------- */
@@ -735,6 +840,7 @@ function showPage(rid){
   if(id==='__path__') updatePath();
   renderMath();
   renderMermaid();
+  applyPendingHighlight();
 }
 
 /* ---------- KaTeX 渲染（多源回退） ---------- */
@@ -774,7 +880,7 @@ function renderMath(){
   tryCss();
 }
 function doRenderMath(){
-  if(typeof renderMathInElement !== 'function') return;
+  if(typeof katex === 'undefined') return;
   // 行内公式：.katex-inline 里的内容
   $$('.katex-inline').forEach(el=>{
     try{ katex.render(el.textContent, el, {throwOnError:false}); }catch(e){}
@@ -1179,27 +1285,184 @@ function initGlossary(){
   };
 }
 
-/* ---------- 搜索 ---------- */
+/* ---------- 搜索 v2：分词 + 多词 + 命中定位 ---------- */
 let searchIndex = null;
+let pendingHl = [];
+function hlEscRe(s){ return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); }
+function tokenizeQuery(q){
+  q = String(q||'').trim().toLowerCase();
+  if(!q) return [];
+  const STOP = new Set(['的','了','是','在','和','与','我','你','他','它','这','那','有','就','都','而','及','或',
+                        '吗','呢','吧','把','被','对','从','到','为','上','下','里','中','个','一',
+                        '什么','怎么','为什么','如何','哪些','这个','那个']);
+  const raw = q.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  const out = [];
+  for(const w of raw){
+    if(STOP.has(w)) continue;
+    if(/^\p{Script=Han}+$/u.test(w) && w.length > 2){
+      out.push(w);
+      for(let i=0;i+2<=w.length;i++) out.push(w.slice(i,i+2));
+    } else out.push(w);
+  }
+  return [...new Set(out)].slice(0,12);
+}
+function hlSnippet(text, terms){
+  const low = text.toLowerCase();
+  let pos = -1, hit = '';
+  for(const t of terms){ const i = low.indexOf(t); if(i>=0 && (pos<0 || i<pos)){ pos=i; hit=t; } }
+  const start = Math.max(0, (pos<0?0:pos) - 60);
+  const end = Math.min(text.length, (pos<0?0:pos) + 140);
+  let s = esc(text.slice(start,end));
+  let budget = 6;                                 // 每段最多标 6 处，避免常见词把片段糊满
+  terms.forEach(t=>{
+    if(t.length < 1 || budget <= 0) return;
+    s = s.replace(new RegExp(hlEscRe(t),'gi'), m=>{
+      if(budget <= 0) return m;
+      budget--;
+      return '<mark class="hl">' + m + '</mark>';
+    });
+  });
+  return '…' + s + '…';
+}
+function applyPendingHighlight(){
+  const terms = pendingHl.slice(); pendingHl = [];
+  if(!terms.length) return;
+  const root = $('#view'); if(!root) return;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+  let node, first = null, idx = -1, term = '';
+  while((node = walker.nextNode())){
+    if(!node.nodeValue || !node.nodeValue.trim()) continue;
+    const low = node.nodeValue.toLowerCase();
+    for(const t of terms){
+      const i = low.indexOf(t);
+      if(i>=0 && (first===null || i<idx || (i===idx && t.length>term.length))){
+        first = node; idx = i; term = t;
+      }
+    }
+  }
+  if(!first) return;
+  try{
+    const i = first.nodeValue.toLowerCase().indexOf(term);
+    if(i<0) return;
+    const range = document.createRange();
+    range.setStart(first, i); range.setEnd(first, i+term.length);
+    const mark = document.createElement('mark');
+    mark.className = 'hit-hl';
+    range.surroundContents(mark);
+    mark.scrollIntoView({block:'center'});
+    mark.classList.add('hit-flash');
+    setTimeout(()=>mark.classList.remove('hit-flash'), 1800);
+  }catch(e){}
+}
+document.addEventListener('click', (e)=>{
+  const a = (e.target && e.target.closest) ? e.target.closest('.search-hit a') : null;
+  if(a && a.dataset.hl) pendingHl = tokenizeQuery(a.dataset.hl);
+});
+function searchHref(id){
+  const map = {'__path__':'#/path','__diagnosis__':'#/diagnosis','__graph__':'#/graph',
+               '__cards__':'#/cards','__glossary__':'#/glossary','__patterns__':'#/patterns',
+               '__cheatsheet__':'#/cheatsheet'};
+  if(map[id]) return map[id];
+  if(id.startsWith('__quiz_')) return '#/quiz/'+id.replace('__quiz_','').replace(/__$/,'');
+  if(id.startsWith('__')) return '';
+  return '#/'+id;
+}
+function searchLabel(id){
+  if((manifest.chapters||[]).some(c=>c.id===id)) return '章节：'+id;
+  if((manifest.concepts||[]).some(c=>c.id===id)) return '概念：'+id;
+  const map = {'__path__':'学习路径','__diagnosis__':'诊断测试','__graph__':'知识图谱','__cards__':'抽认卡',
+               '__glossary__':'术语表','__patterns__':'模式库','__cheatsheet__':'速查表'};
+  if(map[id]) return map[id];
+  if(id.startsWith('__quiz_')) return '测验';
+  return id;
+}
+function pageTitle(id){
+  const ch = (manifest.chapters||[]).find(c=>c.id===id);
+  if(ch) return ch.title || id;
+  const cp = (manifest.concepts||[]).find(c=>c.id===id);
+  if(cp) return cp.title || id;
+  const map = {'__path__':'学习路径','__diagnosis__':'诊断测试','__graph__':'知识图谱','__cards__':'抽认卡',
+               '__glossary__':'术语表','__patterns__':'模式库','__cheatsheet__':'速查表'};
+  if(map[id]) return map[id];
+  if(id.startsWith('__quiz_')){
+    const q = (manifest.quizzes||[]).find(x=>'__quiz_'+x.id===id);
+    return q ? '测验 · '+String(q.question||'').slice(0,14) : '测验';
+  }
+  return id;
+}
+function chapOf(id){
+  const chs = manifest.chapters || [];
+  const ci = chs.findIndex(c=>c.id===id);
+  if(ci >= 0) return {key:'ch:'+id, label:chs[ci].title||id, order:ci};
+  const cp = (manifest.concepts||[]).find(c=>c.id===id);
+  if(cp){
+    const chId = (cp.chapterIds||[])[0];
+    const i = chs.findIndex(c=>c.id===chId);
+    if(i >= 0) return {key:'ch:'+chId, label:chs[i].title||chId, order:i};
+    return {key:'zz', label:'未归入章节', order:900};
+  }
+  return {key:'tools', label:'术语与工具页', order:950, ref:true};
+}
 function buildSearchIndex(){
   if(searchIndex) return searchIndex;
   searchIndex = [];
   Object.entries(pages).forEach(([id, htmlText])=>{
-    if(id.startsWith('__')) return;
+    const href = searchHref(id);
+    if(!href) return;
     const text = htmlText.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ');
-    searchIndex.push({id, text});
+    searchIndex.push({id, href, text, label:pageTitle(id), chap:chapOf(id)});
   });
   return searchIndex;
 }
+function synOf(t){
+  const out = [];
+  for(const g of SYN_GROUPS){ if(g.indexOf(t) >= 0){ for(const x of g){ if(x !== t) out.push(x); } } }
+  return out.slice(0,6);
+}
 $('#q').addEventListener('input', e=>{
-  const v = e.target.value.trim().toLowerCase();
+  const v = e.target.value.trim();
   if(!v){ showPage(routeIdFromHash()); return; }
-  buildSearchIndex();
-  const hits = searchIndex.filter(p=>p.text.toLowerCase().includes(v)).slice(0,20);
-  const label = id => id.startsWith('chapter/')? ('章节：'+manifestChTitle(id.split('/')[1])) : id.startsWith('concept/')? ('概念：'+id.split('/')[1]) : id;
-  $('#view').innerHTML = '<h1>搜索结果：'+esc(v)+'</h1>' +
-    (hits.length? hits.map(h=>`<div class="search-hit"><a href="#/${h.id}">${esc(label(h.id))}</a><br><span class="sub">${esc(h.text.slice(0,180))}</span></div>`).join('')
-                 : '<div class="empty">未找到相关页面，试试章节名/概念名/术语。</div>');
+  const terms = tokenizeQuery(v);
+  if(!terms.length){ showPage(routeIdFromHash()); return; }
+  const grams = [];
+  terms.forEach(t=>{ if(t.length >= 2){ for(let i=0;i+2<=t.length;i++) grams.push(t.slice(i,i+2)); } });
+  const qGrams = [...new Set(grams)].slice(0,16);
+  const snippetTerms = terms.concat(...terms.map(synOf)).slice(0,24);
+  const hits = [];
+  buildSearchIndex().forEach(p=>{
+    const low = p.text.toLowerCase();
+    let tHit = 0, sHit = 0, gHit = 0, first = '', viaSyn = '';
+    for(const t of terms){
+      if(low.includes(t)){ tHit++; if(!first) first = t; continue; }
+      for(const s of synOf(t)){
+        if(low.includes(s)){ sHit++; if(!viaSyn) viaSyn = s; if(!first) first = s; break; }
+      }
+    }
+    for(const gm of qGrams){ if(low.includes(gm)) gHit++; }
+    if(tHit > 0 || sHit > 0 || gHit >= 4){
+      hits.push({p, score: tHit*100 + sHit*30 + Math.min(gHit,20), first, viaSyn});
+    }
+  });
+  hits.sort((a,b)=> b.score-a.score || a.p.text.length-b.p.text.length);
+  const top = hits.slice(0,20);
+  let body;
+  if(top.length){
+    const gs = {};
+    top.forEach(h=>{
+      const k = h.p.chap.key;
+      (gs[k] = gs[k] || {label:h.p.chap.label, order:h.p.chap.order, ref:!!h.p.chap.ref, hits:[]}).hits.push(h);
+    });
+    const eff = g => Math.max(...g.hits.map(x=>x.score)) * (g.ref ? 0.55 : 1);
+    const order = Object.values(gs).sort((a,b)=> eff(b)-eff(a));
+    body = order.map(g=>{
+      const inner = g.hits.sort((a,b)=> b.score-a.score).map(h=>
+        `<div class="search-hit"><a href="${h.p.href}" data-hl="${esc(h.first)}">${esc(h.p.label)}</a>${h.viaSyn?`<span class="syn-note">同义命中：${esc(h.viaSyn)}</span>`:''}<br><span class="sub">${hlSnippet(h.p.text, snippetTerms)}</span></div>`).join('');
+      return `<div class="search-group"><div class="grp-head">${esc(g.label)}<span class="grp-count">${g.hits.length}</span></div>${inner}</div>`;
+    }).join('');
+  } else {
+    body = '<div class="empty">未找到相关内容，试试章节名 / 概念名 / 术语，或减少关键词。</div>';
+  }
+  $('#view').innerHTML = '<h1>搜索结果：'+esc(v)+'</h1>' + body;
 });
 
 /* ---------- Mermaid 懒加载 ---------- */
@@ -1236,6 +1499,13 @@ themeBtn.onclick=()=>{
   document.body.dataset.theme = d? '' : 'dark';
   themeBtn.textContent = d? '🌙 深色' : '☀️ 浅色';
 };
+/* ---------- 进度按钮绑定 ---------- */
+(function(){
+  const ex=$('#progress-export'), im=$('#progress-import'), fi=$('#progress-file');
+  if(ex) ex.onclick = exportProgress;
+  if(im) im.onclick = ()=> fi && fi.click();
+  if(fi) fi.onchange = ()=>{ if(fi.files && fi.files[0]) importProgress(fi.files[0]); fi.value=''; };
+})();
 
 /* ---------- 启动 ---------- */
 renderNav();

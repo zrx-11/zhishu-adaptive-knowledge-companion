@@ -157,6 +157,71 @@ def main():
         hits = page.eval_on_selector_all(".search-hit", "els=>els.length")
         check("全局搜索命中", hits > 0, f"{hits} 条")
 
+        # 7b 搜索 v2：停用词 + 多词 + 片段高亮 + 点击定位
+        page.evaluate("location.hash='#/cross/'+(typeof FIRST_DOC!=='undefined'?FIRST_DOC:'doc1')")
+        page.wait_for_timeout(500)
+        page.fill("#q", f"什么是{term}" if term else "什么是")
+        page.wait_for_timeout(600)
+        t_hits = page.eval_on_selector_all(".search-hit", "els=>els.length")
+        check("分词搜索（含停用词）", t_hits > 0, f"{t_hits} 条")
+
+        gterms = page.eval_on_selector_all(
+            "#glossary-list li", "els=>els.map(e=>e.textContent.split('—')[0].trim())"
+        ) if page.query_selector("#glossary-list") else []
+        if len(gterms) >= 2:
+            page.fill("#q", f"{gterms[0]} {gterms[1]}")
+        elif len(gterms) == 1:
+            page.fill("#q", f"{gterms[0]} 定义")
+        else:
+            page.fill("#q", term or "章节")
+        page.wait_for_timeout(600)
+        m_hits = page.eval_on_selector_all(".search-hit", "els=>els.length")
+        m_marks = page.eval_on_selector_all(".search-hit mark", "els=>els.length")
+        check("多词搜索命中", m_hits > 0, f"{m_hits} 条")
+        check("结果片段高亮", m_marks > 0, f"{m_marks} 处")
+        try:
+            page.click(".search-hit a")
+            page.wait_for_timeout(800)
+            hl = page.eval_on_selector_all(".hit-hl", "els=>els.length")
+            check("点击结果定位高亮", hl > 0, f"{hl} 处")
+        except Exception as e:
+            check("点击结果定位高亮", False, str(e)[:80])
+        # 7d 结果按章节分组
+        page.fill("#q", term or "章节")
+        page.wait_for_timeout(600)
+        g_cnt = page.eval_on_selector_all(".search-group", "els=>els.length")
+        g_heads = page.eval_on_selector_all(".grp-head", "els=>els.map(e=>e.textContent.trim())")
+        hit_lbl = page.eval_on_selector_all(".search-hit a", "els=>els.map(e=>e.textContent.trim())")
+        check("结果按章节分组", g_cnt > 0 and all(g_heads), f"{g_cnt} 组：" + " / ".join(g_heads[:3]))
+        check("结果标题可读", bool(hit_lbl) and all(x and x != "undefined" for x in hit_lbl),
+              f"例：{hit_lbl[0] if hit_lbl else '无'}")
+        page.fill("#q", "")
+        page.wait_for_timeout(300)
+
+        # 7c 同义召回：找一组"书里有 A、书里没有 B"的同义词，搜 B 应命中
+        n_syn = page.evaluate("()=> (typeof SYN_GROUPS!=='undefined'? SYN_GROUPS.length : 0)")
+        check("同义词表已注入", n_syn > 0, f"{n_syn} 组")
+        pair = page.evaluate("""() => {
+            const txt = document.body.innerText;
+            for(const g of SYN_GROUPS){
+                const has = g.filter(w=>txt.includes(w));
+                const miss = g.filter(w=>!txt.includes(w));
+                if(has.length && miss.length) return [has[0], miss[0]];
+            }
+            return null;
+        }""")
+        if pair:
+            page.fill("#q", pair[1])
+            page.wait_for_timeout(600)
+            sn_hits = page.eval_on_selector_all(".search-hit", "els=>els.length")
+            sn_note = page.eval_on_selector_all(".syn-note", "els=>els.length")
+            check("同义召回生效", sn_hits > 0 and sn_note > 0,
+                  f"搜「{pair[1]}」→ {sn_hits} 条（书中只有「{pair[0]}」）")
+        else:
+            check("同义召回生效", True, "本书内所有同义词均已出现，跳过")
+        page.fill("#q", "")
+        page.wait_for_timeout(300)
+
         # 8 进度持久 + 路径标记
         chs0 = page.evaluate(f"BOOKS['{k0}'].manifest.chapters")
         if len(chs0) >= 2:
@@ -176,7 +241,7 @@ def main():
         page.evaluate(f"location.hash='#/book/{k0}/diagnosis'")
         page.wait_for_timeout(700)
         diag_txt = page.inner_text("#view")
-        check("诊断页可打开", "诊断" in diag_txt and "diag-start", "diag-start" in page.content())
+        check("诊断页可打开", "诊断" in diag_txt and "diag-start" in page.content())
         # 深度片段（如果有）
         page.evaluate(f"location.hash='#/book/{k0}/chapter/{chs0[0]['id']}'")
         page.wait_for_timeout(500)
@@ -190,6 +255,43 @@ def main():
         # 出处脚注
         has_source = page.eval_on_selector_all(".source-badge", "els=>els.length")
         check("出处脚注存在", has_source > 0, f"{has_source} 处")
+
+        # 9e 进度导出/导入 + 版本常量（v1.1.0 起）
+        check("总入口有导出/导入按钮",
+              page.eval_on_selector_all("#progress-export, #progress-import", "els=>els.length") == 2)
+        check("进度导出函数可用",
+              page.evaluate("typeof exportProgress==='function' && typeof importProgress==='function'"))
+        ver = page.evaluate("typeof ZS_VERSION!=='undefined'?ZS_VERSION:''")
+        check("版本常量写入", bool(ver), str(ver))
+
+        # 9f 误解卡：仅当 manifest 真的配了 optionMisconceptions 时测
+        mis_probe = page.evaluate("""()=>{
+          for(const k of Object.keys(BOOKS)){
+            const m = BOOKS[k].manifest||{};
+            if(!(m.misconceptions||[]).length) continue;
+            for(const q of (m.quizzes||[])){
+              const om = q.optionMisconceptions||[];
+              for(let i=0;i<om.length;i++){
+                if(om[i] && i!==q.answer) return {book:k, ch:q.chapterId, qid:q.id, opt:i};
+              }
+            }
+          }
+          return null;
+        }""")
+        if mis_probe:
+            try:
+                page.evaluate(f"location.hash='#/book/{mis_probe['book']}/quiz/{mis_probe['ch']}'")
+                page.wait_for_timeout(600)
+                sel = f"[data-qid='{mis_probe['qid']}'] input[value='{mis_probe['opt']}']"
+                page.click(sel)
+                page.click(f"[data-qid='{mis_probe['qid']}'] .quiz-check")
+                page.wait_for_timeout(400)
+                n = page.eval_on_selector_all(".misconception-card", "els=>els.length")
+                check("误解卡渲染（总入口）", n > 0, f"{n} 张")
+            except Exception as e:
+                check("误解卡渲染（总入口）", False, f"驱动失败：{e}")
+        else:
+            check("误解卡（无数据，跳过）", True, "manifest 未配 optionMisconceptions")
 
         # 10 深色模式
         page.click("#theme-btn")

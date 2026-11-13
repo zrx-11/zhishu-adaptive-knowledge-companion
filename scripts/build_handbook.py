@@ -51,6 +51,27 @@ def is_raw(l):
     return m and m.group(1).lower() in ALLOWED_RAW_TAGS
 
 
+def split_table_row(text):
+    """按表格分隔符切分，但忽略公式内与转义的竖线。"""
+    s = text.strip()
+    if s.startswith("|"):
+        s = s[1:]
+    if s.endswith("|") and not s.endswith("\\|"):
+        s = s[:-1]
+    cells, cur, in_math, i = [], [], False, 0
+    while i < len(s):
+        ch = s[i]
+        if ch == "\\" and i + 1 < len(s):
+            cur.append(ch); cur.append(s[i + 1]); i += 2; continue
+        if ch == "$":
+            in_math = not in_math; cur.append(ch); i += 1; continue
+        if ch == "|" and not in_math:
+            cells.append("".join(cur).strip()); cur = []; i += 1; continue
+        cur.append(ch); i += 1
+    cells.append("".join(cur).strip())
+    return cells
+
+
 def md2html(md):
     """最小 Markdown 渲染器（与 build_companion.py 同源）。"""
     lines = md.replace("\r\n", "\n").split("\n")
@@ -134,10 +155,10 @@ def md2html(md):
         if s.startswith("|") and i + 1 < n and re.match(r"^\s*\|?[\s:\-|]+\|?\s*$", lines[i + 1]):
             flush_para()
             close_lists()
-            head = [c.strip() for c in s.strip("|").split("|")]
+            head = split_table_row(s)
             rows, j = [], i + 2
             while j < n and lines[j].strip().startswith("|"):
-                rows.append([c.strip() for c in lines[j].strip().strip("|").split("|")])
+                rows.append(split_table_row(lines[j]))
                 j += 1
             t = ["<table><thead><tr>"] + [f"<th>{inline(esc(c))}</th>" for c in head] + ["</tr></thead><tbody>"]
             for r in rows:
@@ -278,9 +299,10 @@ def normalize_book(key, data):
 
 def clean_title(t):
     t = t or ""
-    for suf in ("点化学习系统", "点化学习伴侣", "学习伴侣", "·"):
+    for suf in ("点化学习系统", "点化学习伴侣", "学习伴侣"):
         t = t.replace(suf, "")
-    return re.sub(r"[《》]", "", t).strip() or t
+    t = re.sub(r"[《》]", "", t).strip().rstrip("·").strip()
+    return t or t
 
 
 def discover(root, order=None, label_map=None):
@@ -322,6 +344,38 @@ def discover(root, order=None, label_map=None):
         })
     return books
 
+
+def _load_synonyms(*dirs):
+    """读取同义词组：技能自带 references/synonyms.json + 各书目录下可选 synonyms.json。
+    返回 [[词,词,...], ...]，组内两两互查；不足两词的组丢弃。"""
+    groups, seen = [], set()
+    base = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "references", "synonyms.json")
+    paths = [base] + [os.path.join(d, "synonyms.json") for d in dirs if d]
+    for p in paths:
+        if not os.path.exists(p):
+            continue
+        try:
+            obj = json.load(open(p, encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(obj, dict):
+            continue
+        for _, v in obj.items():
+            if not isinstance(v, list):
+                continue
+            g = []
+            for x in v:
+                s = str(x).strip()
+                if s and s not in g:
+                    g.append(s)
+            if len(g) < 2:
+                continue
+            key = tuple(sorted(g))
+            if key in seen:
+                continue
+            seen.add(key)
+            groups.append(g)
+    return groups
 
 def main():
     ap = argparse.ArgumentParser()
@@ -416,6 +470,7 @@ def main():
     html = html.replace("__CROSS_META__", dump(cross_meta))
     html = html.replace("__TABS__", dump(tabs))
     html = html.replace("__FIRST_DOC__", dump(cross_meta[0]["key"]))
+    html = html.replace("__SYN_GROUPS__", dump(_load_synonyms(*[b["path"] for b in books])))
 
     out_path = args.out or os.path.join(root, "index.html")
     with open(out_path, "w", encoding="utf-8") as f:
@@ -456,6 +511,7 @@ _SHELL = r"""<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
 <title>学习总手册</title>
 <style>
 :root{
@@ -483,6 +539,10 @@ header{position:sticky;top:0;z-index:20;background:var(--panel);border-bottom:1p
 .hdr-right{float:right;display:flex;gap:8px;align-items:center;margin-top:2px}
 #q{width:260px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:13px}
 #theme-btn{border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:8px;padding:5px 12px;cursor:pointer;white-space:nowrap}
+#progress-export,#progress-import{border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:8px;padding:5px 10px;cursor:pointer;font-size:13px;white-space:nowrap}
+.misconception-card{margin-top:10px;padding:10px 14px;border-left:4px solid var(--bad);background:#fef2f2;border-radius:0 8px 8px 0;font-size:13px}
+.misconception-card b{color:var(--bad)}
+[data-theme="dark"] .misconception-card{background:#2a1215}
 .layout{display:flex;min-height:calc(100vh - 60px)}
 .sidebar{width:290px;flex:none;background:var(--panel);border-right:1px solid var(--border);
   padding:14px;position:sticky;top:60px;height:calc(100vh - 60px);overflow-y:auto}
@@ -495,7 +555,7 @@ header{position:sticky;top:0;z-index:20;background:var(--panel);border-bottom:1p
 .nav-item.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
 .nav-item .done{float:right;color:var(--ok);font-size:12px}
 #nav-toggle{display:none}
-.main{flex:1;min-width:0;padding:28px 40px 80px;max-width:920px}
+.main{flex:1;min-width:0;padding:28px 40px 80px;max-width:920px;margin:0 auto}
 .page h1{font-size:26px;border-bottom:2px solid var(--border);padding-bottom:8px;margin-top:0}
 .page h2{font-size:20px;margin-top:26px}
 .page h3{font-size:17px;margin-top:22px}
@@ -535,7 +595,17 @@ svg{max-width:100%;height:auto}
 #glossary-filter{width:100%;max-width:380px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);margin-bottom:10px}
 #glossary-list li{padding:6px 0;border-bottom:1px dashed var(--border)}
 .glossary-ref{color:var(--muted);font-size:12px}
-.search-hit{margin:10px 0}
+.search-hit{margin:6px 0}
+.search-group{margin:18px 0}
+.grp-head{font-size:13px;font-weight:600;color:var(--muted);border-bottom:1px solid var(--border);padding-bottom:5px;margin-bottom:4px}
+.grp-count{margin-left:6px;font-weight:400;opacity:.75}
+.syn-note{display:inline-block;margin-left:8px;padding:1px 6px;border-radius:4px;background:var(--accent-soft);color:var(--muted);font-size:12px;vertical-align:middle}
+.search-hit mark,.hl{background:#fde68a;color:inherit;padding:0 1px;border-radius:2px}
+.hit-hl{background:#fbbf24;color:inherit;border-radius:3px;box-shadow:0 0 0 2px #fde68a}
+.hit-flash{animation:hitFlash 1.8s ease-out}
+@keyframes hitFlash{from{background:#f59e0b}to{background:#fbbf24}}
+[data-theme="dark"] .search-hit mark,[data-theme="dark"] .hl{background:#92400e;color:#fef3c7}
+[data-theme="dark"] .hit-hl{background:#b45309;color:#fff;box-shadow:0 0 0 2px #78350f}
 .book-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;margin:16px 0}
 .book-card{border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--panel)}
 .book-card h3{margin:0 0 6px;font-size:16px}
@@ -543,10 +613,21 @@ svg{max-width:100%;height:auto}
 .book-card .enter{font-size:13px}
 .empty{color:var(--muted);padding:20px 0}
 @media print{header,.sidebar,.quiz-actions,.card-actions,.card-controls{display:none!important}.main{max-width:none;padding:0}}
+.katex-inline{font-size:1.05em}
+.katex-block{overflow-x:auto;padding:8px 0;text-align:center}
+.katex-block .katex{font-size:1.1em}
 @media (max-width:820px){.sidebar{width:100%;height:auto;position:static;padding:10px 14px}
-  #nav{display:none}.sidebar.open #nav{display:block}
+  .page{overflow-wrap:anywhere}.page table{display:block;overflow-x:auto;max-width:100%}
+  .page h1,.page h2,.page h3{line-height:1.35}
+  #nav{display:none;max-height:46vh;overflow-y:auto;overscroll-behavior:contain}.sidebar.open #nav{display:block}
+  .nav-item{padding:9px 10px}
+  #q,#glossary-filter{font-size:16px}
+  .quiz-opts label{padding:8px 0;min-height:30px}
+  .quiz-check{padding:10px 18px;min-height:40px}
+  #diag-start{min-height:40px}
+  .card-actions button{min-height:40px}
   #nav-toggle{display:block;width:100%;padding:8px 10px;margin:4px 0;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;text-align:left;cursor:pointer}
-  .layout{flex-direction:column}.main{padding:16px}
+  .layout{flex-direction:column}.main{padding:20px 18px 64px;max-width:none;width:100%}
   .hdr-right{float:none;margin-top:8px}#q{width:100%}}
 </style>
 </head>
@@ -556,7 +637,10 @@ svg{max-width:100%;height:auto}
   <span class="tabs" id="tabs"></span>
   <span class="hdr-right">
     <input id="q" type="search" placeholder="全书搜索…">
+    <button id="progress-export">⬇ 导出进度</button>
+    <button id="progress-import">⬆ 导入进度</button>
     <button id="theme-btn">🌙 深色</button>
+    <input type="file" id="progress-file" accept="application/json" hidden>
   </span>
 </header>
 <div class="layout">
@@ -565,12 +649,13 @@ svg{max-width:100%;height:auto}
     <div id="progress-label">进度 0%</div>
     <nav id="nav"></nav>
   </aside>
-  <main><div id="view" class="page"></div></main>
+  <main class="main"><div id="view" class="page"></div></main>
 </div>
 <script>
 const BOOKS = __BOOKS__;
 const META = __META__;
 const CROSS = __CROSS__;
+const SYN_GROUPS = __SYN_GROUPS__;
 const CROSS_META = __CROSS_META__;
 const TABS = __TABS__;
 const FIRST_DOC = __FIRST_DOC__;
@@ -585,6 +670,36 @@ const store = {
 function stKey(book,k){ return 'hb:'+book+':'+k; }
 function getState(book){
   return { visited: store.get(stKey(book,'visited'))||[], quiz: store.get(stKey(book,'quiz'))||{}, cards: store.get(stKey(book,'cards'))||{} };
+}
+const ZS_VERSION = '1.4.0';
+/* ---------- 进度导出 / 导入（跨设备） ---------- */
+function exportProgress(){
+  const data = {};
+  for(let i=0;i<localStorage.length;i++){
+    const k = localStorage.key(i);
+    if(k && k.indexOf('hb:')===0) data[k]=localStorage.getItem(k);
+  }
+  const payload = {app:'zhishu', skillVersion:ZS_VERSION, kind:'handbook', exportedAt:new Date().toISOString(), prefix:'hb:', data};
+  const blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'zhishu-handbook-progress-'+new Date().toISOString().slice(0,10)+'.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+}
+function importProgress(file){
+  const fr = new FileReader();
+  fr.onload = () => {
+    try{
+      const p = JSON.parse(fr.result);
+      if(!p || p.app!=='zhishu' || !p.data || typeof p.data!=='object') throw new Error('不是知枢进度文件');
+      let n = 0;
+      Object.keys(p.data).forEach(k=>{ if(k.indexOf('hb:')===0){ localStorage.setItem(k, p.data[k]); n++; } });
+      if(!n){ alert('这个文件里没有总手册的进度'); return; }
+      alert('已导入 '+n+' 条进度，页面将刷新'); location.reload();
+    }catch(e){ alert('导入失败：'+e.message); }
+  };
+  fr.readAsText(file);
 }
 
 /* ---------- 路由 ---------- */
@@ -605,6 +720,7 @@ function pageIdOf(page){
   if(page==='glossary') return '__glossary__';
   if(page==='patterns') return '__patterns__';
   if(page==='cheatsheet') return '__cheatsheet__';
+  if(page==='diagnosis') return '__diagnosis__';
   if(page.startsWith('quiz/')) return '__quiz_'+(page.split('/')[1]||'all')+'__';
   if(page.startsWith('chapter/')) return page.slice(8);
   if(page.startsWith('concept/')) return page.slice(8);
@@ -644,6 +760,7 @@ function renderNav(){
   const S=getState(cur.book);
   const man=B.manifest;
   add('学习路径','#/book/'+cur.book+'/path', cur.page==='path'?'active':'');
+  add('🩺 诊断测试','#/book/'+cur.book+'/diagnosis', cur.page==='diagnosis'?'active':'');
   sec('章节');
   (man.chapters||[]).forEach(c=>{
     const id=c.id;
@@ -712,6 +829,7 @@ function renderCross(){
   }
   v.innerHTML = pre + html;
   renderMermaid();
+  renderMath();
 }
 
 function renderBook(){
@@ -728,9 +846,97 @@ function renderBook(){
   $('#view').innerHTML=html;
   if(cur.page==='cards') initCards();
   if(cur.page==='glossary') initGlossary();
+  if(cur.page==='diagnosis') initDiagnosis();
   if(cur.page.startsWith('quiz/')) initQuizzes();
   if(pid==='__path__') updatePath();
   renderMermaid();
+  renderMath();
+}
+
+/* ---------- 诊断测试（总入口版） ---------- */
+let diagQueue=[], diagIdx=0, diagWrong=[];
+function dq(id){ return (BOOKS[cur.book].manifest.concepts||[]).find(c=>c.id===id); }
+function dch(id){ return (BOOKS[cur.book].manifest.chapters||[]).find(c=>c.id===id); }
+function dprereqs(node){ return (node&&(node.prerequisites||node.prereqs))||[]; }
+function dlink(kind,id){ return '#/book/'+cur.book+'/'+(kind==='concept'?'concept/':'chapter/')+id; }
+function traceBack(startConceptId,startChapterId){
+  const seen=new Set(), chain=[], q=[];
+  if(startConceptId){ const c=dq(startConceptId); if(c) q.push({node:c,kind:'concept'}); }
+  if(startChapterId){ const c=dch(startChapterId); if(c) q.push({node:c,kind:'chapter'}); }
+  while(q.length && chain.length<6){
+    const it=q.shift(); if(seen.has(it.node.id)) continue;
+    seen.add(it.node.id); chain.push(it);
+    dprereqs(it.node).forEach(pid=>{
+      const c=dq(pid); if(c){ q.push({node:c,kind:'concept'}); return; }
+      const h=dch(pid); if(h) q.push({node:h,kind:'chapter'});
+    });
+  }
+  return chain;
+}
+function initDiagnosis(){
+  const btn=$('#diag-start'); if(!btn||btn.dataset.inited) return;
+  btn.dataset.inited='1';
+  btn.addEventListener('click',()=>{
+    const all=(BOOKS[cur.book].manifest.quizzes||[]).slice();
+    for(let i=all.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [all[i],all[j]]=[all[j],all[i]]; }
+    diagQueue=all.slice(0,Math.min(5,all.length)); diagIdx=0; diagWrong=[];
+    showDiagQuestion();
+  });
+}
+function _diagQuizHTML(q,idx){
+  const t=q.type||'single', qid=q.id||('diag'+idx);
+  let h=`<div class='quiz-item' data-qid='${qid}' data-type='${t}'>`;
+  h+=`<p class='quiz-q'><b>Q${idx}.</b> ${esc(q.question||'')}</p>`;
+  if(t==='single'||t==='multi'){
+    const it=t==='single'?'radio':'checkbox'; h+="<div class='quiz-opts'>";
+    (q.options||[]).forEach((o,i)=>{ h+=`<label class='quiz-opt'><input type='${it}' name='${qid}' value='${i}'> ${esc(String(o))}</label>`; });
+    h+='</div>';
+  } else h+=`<input class='quiz-blank' type='text' placeholder='填写答案'>`;
+  h+=`<div class='quiz-actions'><button class='quiz-check'>检查答案</button><span class='quiz-feedback'></span></div></div>`;
+  return h;
+}
+function showDiagQuestion(){
+  const stage=$('#diag-stage'), result=$('#diag-result');
+  if(!stage||!result) return;
+  result.innerHTML='';
+  if(diagIdx>=diagQueue.length){ finishDiagnosis(); return; }
+  const q=diagQueue[diagIdx];
+  $('#diag-progress').textContent=`第 ${diagIdx+1} / ${diagQueue.length} 题`;
+  stage.innerHTML=_diagQuizHTML(q,diagIdx+1);
+  const item=stage.querySelector('.quiz-item'), btn=item.querySelector('.quiz-check');
+  btn.addEventListener('click',()=>{
+    let correct=false;
+    if(q.type==='single'){ const s=item.querySelector('input:checked'); correct=!!s&&parseInt(s.value)===q.answer; }
+    else if(q.type==='multi'){
+      const u=Array.from(item.querySelectorAll('input:checked')).map(i=>parseInt(i.value)).sort();
+      const a=(Array.isArray(q.answer)?q.answer.slice():[q.answer]).sort();
+      correct=u.length>0&&JSON.stringify(u)===JSON.stringify(a);
+    } else { const v=(item.querySelector('.quiz-blank').value||'').trim().toLowerCase(); correct=v===String(q.answer).trim().toLowerCase(); }
+    if(!correct){
+      diagWrong.push(q); const chain=traceBack(q.relatedConceptId,q.chapterId);
+      if(chain.length>1){
+        const links=chain.slice(1).map(({node,kind})=>`<div class="diag-remedy-item">建议先学：<a href="${dlink(kind,node.id)}">${esc(node.title||node.id)}</a></div>`).join('');
+        result.innerHTML='<h3>这道题答错了，可能的根因：</h3>'+links+'<p><button id="diag-next" class="quiz-check">下一题 →</button></p>';
+      } else result.innerHTML='<p><button id="diag-next" class="quiz-check">下一题 →</button></p>';
+    } else result.innerHTML='<p>✓ 正确。<button id="diag-next" class="quiz-check">下一题 →</button></p>';
+    $('#diag-next').addEventListener('click',()=>{ diagIdx++; showDiagQuestion(); });
+  });
+}
+function finishDiagnosis(){
+  const total=diagQueue.length, wrong=diagWrong.length, right=total-wrong;
+  let h=`<h2>诊断完成：${right}/${total} 正确</h2>`;
+  if(wrong===0) h+='<p>这组题全对，可以继续往下学。</p>';
+  else{
+    h+=`<p>有 ${wrong} 道题答错。下面是按依赖链回溯的补强建议：</p>`;
+    const seen=new Set();
+    diagWrong.forEach(q=>{ traceBack(q.relatedConceptId,q.chapterId).slice(1).forEach(({node,kind})=>{
+      if(seen.has(node.id)) return; seen.add(node.id);
+      h+=`<div class="diag-remedy-item">📚 <a href="${dlink(kind,node.id)}">${esc(node.title||node.id)}</a></div>`;
+    }); });
+  }
+  h+='<p><button id="diag-restart" class="quiz-check">重新诊断</button></p>';
+  $('#diag-stage').innerHTML=''; $('#diag-progress').textContent=''; $('#diag-result').innerHTML=h;
+  $('#diag-restart').addEventListener('click',()=>$('#diag-start').click());
 }
 
 /* ---------- 测验 ---------- */
@@ -770,6 +976,17 @@ function initQuizzes(){
       let ex=item.querySelector('.quiz-explain');
       if(!ex){ ex=document.createElement('div'); ex.className='quiz-explain'; item.appendChild(ex); }
       ex.innerHTML='解析：'+esc(q.explain||'');
+      /* 误解卡片：单选答错且该选项标注了 optionMisconceptions（与单书伴侣对齐） */
+      const oldMis = item.querySelector('.misconception-card');
+      const selMis = type==='single' ? item.querySelector('input:checked') : null;
+      const misId = selMis ? (selMis.dataset.misconception||'') : '';
+      const mis = misId ? (B.manifest.misconceptions||[]).find(m=>m.id===misId) : null;
+      if(!correct && mis){
+        let card = oldMis || document.createElement('div');
+        card.className='misconception-card';
+        card.innerHTML = `<b>⚠ 常见误解</b><br>你选了「${esc(mis.wrong)}」——${esc(mis.correction)}`;
+        if(!oldMis) item.appendChild(card);
+      } else if(oldMis){ oldMis.remove(); }
       const S=getState(cur.book);
       const ch=q.chapterId||'__all__';
       if(!S.quiz[ch]) S.quiz[ch]={n:0};
@@ -855,45 +1072,178 @@ function initGlossary(){
   };
 }
 
-/* ---------- 全局搜索 ---------- */
+/* ---------- 全局搜索 v2：分词 + 多词 + 命中定位 ---------- */
 let searchIdx=null;
+let pendingHl=[];
+function hlEscRe(s){ return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); }
+function tokenizeQuery(q){
+  q=String(q||'').trim().toLowerCase();
+  if(!q) return [];
+  const STOP=new Set(['的','了','是','在','和','与','我','你','他','它','这','那','有','就','都','而','及','或',
+                      '吗','呢','吧','把','被','对','从','到','为','上','下','里','中','个','一',
+                      '什么','怎么','为什么','如何','哪些','这个','那个']);
+  const raw=q.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  const out=[];
+  for(const w of raw){
+    if(STOP.has(w)) continue;
+    if(/^\p{Script=Han}+$/u.test(w) && w.length>2){
+      out.push(w);
+      for(let i=0;i+2<=w.length;i++) out.push(w.slice(i,i+2));
+    } else out.push(w);
+  }
+  return [...new Set(out)].slice(0,12);
+}
+function hlSnippet(text, terms){
+  const low=text.toLowerCase();
+  let pos=-1,hit='';
+  for(const t of terms){ const i=low.indexOf(t); if(i>=0 && (pos<0 || i<pos)){ pos=i; hit=t; } }
+  const start=Math.max(0,(pos<0?0:pos)-60);
+  const end=Math.min(text.length,(pos<0?0:pos)+140);
+  let s = esc(text.slice(start,end));
+  let budget = 6;                                 // 每段最多标 6 处，避免常见词把片段糊满
+  terms.forEach(t=>{
+    if(t.length < 1 || budget <= 0) return;
+    s = s.replace(new RegExp(hlEscRe(t),'gi'), m=>{
+      if(budget <= 0) return m;
+      budget--;
+      return '<mark class="hl">' + m + '</mark>';
+    });
+  });
+  return '…' + s + '…';
+}
+function applyPendingHighlight(){
+  const terms=pendingHl.slice(); pendingHl=[];
+  if(!terms.length) return;
+  const root=$('#view'); if(!root) return;
+  const walker=document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+  let node, first=null, idx=-1, term='';
+  while((node=walker.nextNode())){
+    if(!node.nodeValue || !node.nodeValue.trim()) continue;
+    const low=node.nodeValue.toLowerCase();
+    for(const t of terms){
+      const i=low.indexOf(t);
+      if(i>=0 && (first===null || i<idx || (i===idx && t.length>term.length))){ first=node; idx=i; term=t; }
+    }
+  }
+  if(!first) return;
+  try{
+    const i=first.nodeValue.toLowerCase().indexOf(term);
+    if(i<0) return;
+    const range=document.createRange();
+    range.setStart(first,i); range.setEnd(first,i+term.length);
+    const mark=document.createElement('mark');
+    mark.className='hit-hl';
+    range.surroundContents(mark);
+    mark.scrollIntoView({block:'center'});
+    mark.classList.add('hit-flash');
+    setTimeout(()=>mark.classList.remove('hit-flash'),1800);
+  }catch(e){}
+}
+document.addEventListener('click',(e)=>{
+  const a=(e.target && e.target.closest)?e.target.closest('.search-hit a'):null;
+  if(a && a.dataset.hl) pendingHl=tokenizeQuery(a.dataset.hl);
+});
+function pageMeta(bkey, page){
+  const B=BOOKS[bkey];
+  if(!B) return {label:'总览', chap:{key:'cross|'+page, label:'跨书总览', order:960}};
+  const mf=B.manifest||{}, parts=page.split('/'), kind=parts[0], id=parts.length>1?parts[1]:parts[0], chs=mf.chapters||[];
+  if(kind==='chapter'){
+    const i=chs.findIndex(c=>c.id===id);
+    return {label:(chs[i]||{}).title||id, chap:{key:bkey+'|'+id, label:(chs[i]||{}).title||id, order:i}};
+  }
+  if(kind==='concept'){
+    const cp=(mf.concepts||[]).find(c=>c.id===id)||{}, chId=(cp.chapterIds||[])[0];
+    const i=chs.findIndex(c=>c.id===chId);
+    return {label:cp.title||id,
+            chap:i>=0?{key:bkey+'|'+chId, label:chs[i].title||chId, order:i}:{key:bkey+'|zz', label:'未归入章节', order:900}};
+  }
+  if(kind==='quiz') return {label:'测验', chap:{key:bkey+'|quiz', label:'测验', order:800}};
+  const map={path:'学习路径',cards:'抽认卡',glossary:'术语表',patterns:'模式库',cheatsheet:'速查表',graph:'知识图谱'};
+  return {label:map[id]||id, chap:{key:bkey+'|tools', label:'术语与工具页', order:850, ref:true}};
+}
 function buildSearch(){
   if(searchIdx) return searchIdx;
   searchIdx=[];
   META.forEach(m=>{
     const B=BOOKS[m.key];
     Object.entries(B.rendered).forEach(([pid,html])=>{
-      if(pid.startsWith('__')) return;
+      if(pid==='__diagnosis__') return;          // 诊断页是交互页，不进搜索
+      const page=pdfToPage(pid, B);
+      if(!page) return;
       const text=html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ');
-      searchIdx.push({book:m.key, page:pdfToPage(pid, B), text, label:m.title});
+      const pm=pageMeta(m.key, page);
+      searchIdx.push({book:m.key, page, text, label:pm.label, chap:pm.chap, bookTitle:m.title});
     });
   });
   Object.entries(CROSS).forEach(([k,html])=>{
     const meta=CROSS_META.find(x=>x.key===k)||{};
-    searchIdx.push({book:'cross', page:'cross/'+k, text:html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' '), label:(meta.label||'总览')});
+    searchIdx.push({book:'cross', page:'cross/'+k, text:html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' '),
+                    label:(meta.label||'总览'), chap:{key:'cross|'+k, label:'跨书总览', order:960}, bookTitle:'总览'});
   });
   return searchIdx;
 }
 function pdfToPage(pid, B){
   if(pid.startsWith('__quiz_')) return 'quiz/'+pid.replace('__quiz_','').replace('__','');
-  if(pid==='__path__') return 'path';
-  if(pid==='__cards__') return 'cards';
-  if(pid==='__glossary__') return 'glossary';
-  if(pid==='__patterns__') return 'patterns';
-  if(pid==='__cheatsheet__') return 'cheatsheet';
+  const sp={'__path__':'path','__cards__':'cards','__glossary__':'glossary','__patterns__':'patterns',
+            '__cheatsheet__':'cheatsheet','__diagnosis__':'diagnosis','__graph__':'graph'};
+  if(sp[pid]) return sp[pid];
   const ch=(B.manifest.chapters||[]).find(c=>c.id===pid);
   if(ch) return 'chapter/'+pid;
   return 'concept/'+pid;
 }
+function synOf(t){
+  const out=[];
+  for(const g of SYN_GROUPS){ if(g.indexOf(t)>=0){ for(const x of g){ if(x!==t) out.push(x); } } }
+  return out.slice(0,6);
+}
 $('#q').addEventListener('input', e=>{
-  const v=e.target.value.trim().toLowerCase();
+  const v=e.target.value.trim();
   if(!v){ route(); return; }
-  const hits=buildSearch().filter(p=>p.text.toLowerCase().includes(v)).slice(0,40);
-  $('#view').innerHTML='<h1>搜索结果：'+esc(v)+'</h1>'+
-    (hits.length? hits.map(h=>{
-      const href=h.book==='cross'?('#/cross/'+(h.page.split('/')[1]||FIRST_DOC)):('#/book/'+h.book+'/'+h.page);
-      return `<div class="search-hit"><a href="${href}">${esc(h.label)}</a><br><span style="color:var(--muted);font-size:13px">${esc(h.text.slice(0,200))}</span></div>`;
-    }).join('') : '<div class="empty">未找到相关内容，试试章节名 / 概念名 / 术语。</div>');
+  const terms=tokenizeQuery(v);
+  if(!terms.length){ route(); return; }
+  const grams=[];
+  terms.forEach(t=>{ if(t.length>=2){ for(let i=0;i+2<=t.length;i++) grams.push(t.slice(i,i+2)); } });
+  const qGrams=[...new Set(grams)].slice(0,16);
+  const snippetTerms=terms.concat(...terms.map(synOf)).slice(0,24);
+  const hits=[];
+  buildSearch().forEach(p=>{
+    const low=p.text.toLowerCase();
+    let tHit=0, sHit=0, gHit=0, first='', viaSyn='';
+    for(const t of terms){
+      if(low.includes(t)){ tHit++; if(!first) first=t; continue; }
+      for(const s of synOf(t)){
+        if(low.includes(s)){ sHit++; if(!viaSyn) viaSyn=s; if(!first) first=s; break; }
+      }
+    }
+    for(const gm of qGrams){ if(low.includes(gm)) gHit++; }
+    if(tHit>0 || sHit>0 || gHit>=4){
+      hits.push({p, score: tHit*100 + sHit*30 + Math.min(gHit,20), first, viaSyn});
+    }
+  });
+  hits.sort((a,b)=> b.score-a.score || a.p.text.length-b.p.text.length);
+  const top=hits.slice(0,40);
+  let body;
+  if(top.length){
+    const gs={};
+    top.forEach(h=>{
+      const k=h.p.chap.key;
+      (gs[k]=gs[k]||{label:h.p.chap.label, order:h.p.chap.order, ref:!!h.p.chap.ref, book:h.p.bookTitle, hits:[]}).hits.push(h);
+    });
+    const multi=META.length>1;
+    const eff=g=>Math.max(...g.hits.map(x=>x.score))*(g.ref?0.55:1);
+    const order=Object.values(gs).sort((a,b)=> eff(b)-eff(a));
+    body=order.map(g=>{
+      const head=(multi&&g.book)?(g.book+' · '+g.label):g.label;
+      const inner=g.hits.sort((a,b)=>b.score-a.score).map(h=>{
+        const href=h.p.book==='cross'?('#/cross/'+(h.p.page.split('/')[1]||FIRST_DOC)):('#/book/'+h.p.book+'/'+h.p.page);
+        return `<div class="search-hit"><a href="${href}" data-hl="${esc(h.first)}">${esc(h.p.label)}</a>${h.viaSyn?`<span class="syn-note">同义命中：${esc(h.viaSyn)}</span>`:''}<br><span style="color:var(--muted);font-size:13px">${hlSnippet(h.p.text, snippetTerms)}</span></div>`;
+      }).join('');
+      return `<div class="search-group"><div class="grp-head">${esc(head)}<span class="grp-count">${g.hits.length}</span></div>${inner}</div>`;
+    }).join('');
+  } else {
+    body='<div class="empty">未找到相关内容，试试章节名 / 概念名 / 术语，或减少关键词。</div>';
+  }
+  $('#view').innerHTML='<h1>搜索结果：'+esc(v)+'</h1>'+body;
 });
 
 /* ---------- Mermaid ---------- */
@@ -913,16 +1263,19 @@ function renderMermaid(){
   if(window.mermaid){ run(); return; }
   if(mermaidState==='loading') return;
   mermaidState='loading';
-  const urls=['https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js',
-              'https://unpkg.com/mermaid@10/dist/mermaid.min.js',
-              'https://registry.npmmirror.com/mermaid/10/files/dist/mermaid.min.js'];
+  const urls=['https://registry.npmmirror.com/mermaid/10/files/dist/mermaid.min.js',
+              'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js',
+              'https://unpkg.com/mermaid@10/dist/mermaid.min.js'];
   let ui=0;
   const tryNext=()=>{
     if(ui>=urls.length){ mermaidState='failed'; return; }
     const s=document.createElement('script');
     s.src=urls[ui++];
-    s.onload=()=>{ mermaidState='loaded'; run(); };
-    s.onerror=()=>{ s.remove(); tryNext(); };
+    let done=false;
+    const next=()=>{ if(done) return; done=true; s.remove(); tryNext(); };
+    const timer=setTimeout(()=>{ if(!window.mermaid) next(); },6000);
+    s.onload=()=>{ done=true; clearTimeout(timer); mermaidState='loaded'; run(); };
+    s.onerror=()=>{ clearTimeout(timer); next(); };
     document.head.appendChild(s);
   };
   tryNext();
@@ -935,6 +1288,13 @@ themeBtn.onclick=()=>{
   document.body.dataset.theme=d?'':'dark';
   themeBtn.textContent=d?'🌙 深色':'☀️ 浅色';
 };
+/* ---------- 进度按钮绑定 ---------- */
+(function(){
+  const ex=$('#progress-export'), im=$('#progress-import'), fi=$('#progress-file');
+  if(ex) ex.onclick = exportProgress;
+  if(im) im.onclick = ()=> fi && fi.click();
+  if(fi) fi.onchange = ()=>{ if(fi.files && fi.files[0]) importProgress(fi.files[0]); fi.value=''; };
+})();
 
 /* ---------- 启动 ---------- */
 function route(){
@@ -943,6 +1303,7 @@ function route(){
   renderNav();
   if(cur.book==='cross') renderCross(); else renderBook();
   window.scrollTo(0,0);
+  applyPendingHighlight();
 }
 window.addEventListener('hashchange', route);
 (function(){
@@ -952,6 +1313,50 @@ window.addEventListener('hashchange', route);
   sb.insertBefore(btn, sb.querySelector('#nav'));
   window.addEventListener('hashchange',()=>{ if(window.innerWidth<=820) sb.classList.remove('open'); });
 })();
+/* ---------- KaTeX 公式渲染（多源回退） ---------- */
+let katexLoading=false, katexReady=false;
+function renderMath(){
+  if(!document.querySelector('.katex-inline, .katex-block')) return;
+  if(katexReady){ doRenderMath(); return; }
+  if(katexLoading) return;
+  katexLoading=true;
+  const cssUrls=[
+    'https://registry.npmmirror.com/katex/0.16.9/files/dist/katex.min.css',
+    'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css',
+    'https://unpkg.com/katex@0.16.9/dist/katex.min.css'
+  ];
+  const jsUrls=[
+    'https://registry.npmmirror.com/katex/0.16.9/files/dist/katex.min.js',
+    'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js',
+    'https://unpkg.com/katex@0.16.9/dist/katex.min.js'
+  ];
+  let ci=0, ji=0;
+  const tryCss=()=>{
+    if(ci>=cssUrls.length) return;
+    const link=document.createElement('link');
+    link.rel='stylesheet'; link.href=cssUrls[ci++];
+    link.onload=tryJs; link.onerror=()=>{link.remove(); tryCss();};
+    document.head.appendChild(link);
+  };
+  const tryJs=()=>{
+    if(ji>=jsUrls.length){ katexLoading=false; return; }
+    const s=document.createElement('script');
+    s.src=jsUrls[ji++];
+    s.onload=()=>{ katexReady=true; katexLoading=false; doRenderMath(); };
+    s.onerror=()=>{ s.remove(); tryJs(); };
+    document.head.appendChild(s);
+  };
+  tryCss();
+}
+function doRenderMath(){
+  if(typeof katex==='undefined') return;
+  document.querySelectorAll('.katex-inline').forEach(el=>{
+    try{ katex.render(el.textContent, el, {throwOnError:false}); }catch(e){}
+  });
+  document.querySelectorAll('.katex-block').forEach(el=>{
+    try{ katex.render(el.textContent, el, {displayMode:true, throwOnError:false}); }catch(e){}
+  });
+}
 route();
 </script>
 </body>
