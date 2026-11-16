@@ -2,7 +2,7 @@
 
 把任何学习材料——一个知识点、一组题、一份课件、一本书、多本书——变成"按依赖带你走、答错倒推根因、难点从零推透"的单文件交互学习网页。
 
-**当前版本 v1.4.0**（更新记录见 [CHANGELOG.md](CHANGELOG.md)）
+**当前版本 v1.4.1**（更新记录见 [CHANGELOG.md](CHANGELOG.md)）
 
 ## 特性
 
@@ -26,6 +26,8 @@
 
 **工程**
 
+- 资源加载（v1.4.1）：KaTeX / Mermaid / Pico / vis-network 统一 jsDelivr 优先、npmmirror 次之、unpkg 兜底，每个源带超时回退；修正了 vis-network 的 `dist/dist` JS 路径与 pico、vis 的 404 npmmirror 地址
+- 单书 Pages 形态（书目录里只有 `index.html`）也能被 `build_handbook.py` 识别为伴侣
 - 版本号写入页面（`ZS_VERSION`），误解卡在单书与总入口都可用
 - 进度导出/导入（JSON），单书与多书总入口前缀隔离，换设备可搬
 - `verify_handbook.py` 32 项浏览器回归（真实 chromium 跑，不是静态检查）
@@ -56,8 +58,8 @@ python3 scripts/verify_handbook.py --index <root>/index.html \
 ## 目录结构
 
 ```
-├── SKILL.md                 # 技能主文档：六层架构、五种输入形态、八阶段流程、17 条踩坑
-├── CHANGELOG.md             # 1.4.0 / 1.3.0 / 1.2.0 / 1.1.0 / 1.0.0
+├── SKILL.md                 # 技能主文档：六层架构、五种输入形态、八阶段流程、18 条踩坑
+├── CHANGELOG.md             # 1.4.1 / 1.4.0 / 1.3.0 / 1.2.0 / 1.1.0 / 1.0.0
 ├── agents/doubao.yaml
 ├── references/
 │   ├── workflow.md          # 八阶段流程细则
@@ -79,4 +81,4 @@ python3 scripts/verify_handbook.py --index <root>/index.html \
 2. 分组只到章节级，不按概念聚合。
 3. 误解卡仅对单选题生效。
 4. 全量重建：已有 HTML 不会自动获得新能力，需重新 build。
-5. 依赖 KaTeX CDN，离线打开公式不渲染。
+5. 依赖 CDN（KaTeX 公式、Mermaid 流程图）；离线打开时公式显示源码、流程图显示提示，文字与做题不受影响。

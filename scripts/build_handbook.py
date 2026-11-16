@@ -315,7 +315,12 @@ def discover(root, order=None, label_map=None):
             continue
         htmls = [f for f in os.listdir(p) if f.lower().endswith(".html") and f != "index.html"]
         if not htmls:
-            continue
+            # 单书 Pages 交付形态（如 神经网络-从零推透/index.html）：整书内联在 index.html 里，
+            # 目录名本身就是网页根，此时 index.html 即伴侣。优先仍用命名更明确的 *.html。
+            if os.path.exists(os.path.join(p, "index.html")):
+                htmls = ["index.html"]
+            else:
+                continue
         dirs.append((name, p, htmls))
 
     if order:
@@ -671,7 +676,7 @@ function stKey(book,k){ return 'hb:'+book+':'+k; }
 function getState(book){
   return { visited: store.get(stKey(book,'visited'))||[], quiz: store.get(stKey(book,'quiz'))||{}, cards: store.get(stKey(book,'cards'))||{} };
 }
-const ZS_VERSION = '1.4.0';
+const ZS_VERSION = '1.4.1';
 /* ---------- 进度导出 / 导入（跨设备） ---------- */
 function exportProgress(){
   const data = {};
@@ -1263,9 +1268,9 @@ function renderMermaid(){
   if(window.mermaid){ run(); return; }
   if(mermaidState==='loading') return;
   mermaidState='loading';
-  const urls=['https://registry.npmmirror.com/mermaid/10/files/dist/mermaid.min.js',
-              'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js',
-              'https://unpkg.com/mermaid@10/dist/mermaid.min.js'];
+  const urls=['https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js',
+              'https://registry.npmmirror.com/mermaid/10.9.1/files/dist/mermaid.min.js',
+              'https://unpkg.com/mermaid@10.9.1/dist/mermaid.min.js'];
   let ui=0;
   const tryNext=()=>{
     if(ui>=urls.length){ mermaidState='failed'; return; }
@@ -1321,13 +1326,13 @@ function renderMath(){
   if(katexLoading) return;
   katexLoading=true;
   const cssUrls=[
-    'https://registry.npmmirror.com/katex/0.16.9/files/dist/katex.min.css',
     'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css',
+    'https://registry.npmmirror.com/katex/0.16.9/files/dist/katex.min.css',
     'https://unpkg.com/katex@0.16.9/dist/katex.min.css'
   ];
   const jsUrls=[
-    'https://registry.npmmirror.com/katex/0.16.9/files/dist/katex.min.js',
     'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js',
+    'https://registry.npmmirror.com/katex/0.16.9/files/dist/katex.min.js',
     'https://unpkg.com/katex@0.16.9/dist/katex.min.js'
   ];
   let ci=0, ji=0;

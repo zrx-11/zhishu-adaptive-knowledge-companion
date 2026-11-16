@@ -1,7 +1,7 @@
 ---
 name: zhishu
 display_name: 知枢学习系统
-version: 1.4.0
+version: 1.4.1
 description: 把任何学习材料——一个知识点、一组题、一份课件、一本书、多本书——变成"按依赖带你走、答错倒推根因、难点从零推透"的单文件交互学习网页。自动识别输入形态并选最轻的流水线：知识点走第一性原理推导、题目走诊断、课件走单章、书走整书成课、多书走整合入口。适用于"讲一下这个概念""把这堆题做成诊断卡""把这份课件做成能学的页""把这本书吃透""把几本书整合成一门课"。
 ---
 
@@ -130,7 +130,7 @@ zhishu/
 ├── scripts/
 │   ├── extract_text.py               # 多格式抽文本
 │   ├── build_companion.py            # 单书 HTML 组装（含 KaTeX/诊断/深度片段）
-│   ├── build_handbook.py              # 多书总入口
+│   ├── build_handbook.py             # 多书总入口
 │   ├── verify_handbook.py             # 端到端验证
 │   └── package_delivery.py           # 打包
 └── references/
@@ -157,7 +157,7 @@ zhishu/
 2. **公式里 `<` 后跟字母被当标签**：`$m<n$` 会变成残留 `$m`，因为浏览器把 `<n` 当标签开头。build_companion.py 已自动把公式内 `<[a-zA-Z]` 转成 `&lt;`，但如果你手写 HTML 片段放进 Markdown，必须自己转义。
 3. **多书合并时测验 id 重复**：每本书的测验 id 只写 `q01`，build_handbook.py 会统一加书前缀。**不要在单书 manifest 里自己加 `ch01-q01`**，否则会变成 `book1-ch01-q01`，页面能作答但一致性检查报错。
 4. **多章节固定 id 按钮失效**：所有交互按钮用 class + 事件委托绑在 document 上，不要用 getElementById。build_companion.py 已遵守。
-5. **CDN 国内不可达**：KaTeX 和 Mermaid 的 CDN 顺序已调成 npmmirror → jsdelivr → unpkg。如果用户在无网环境，公式和图会显示源码，但不报错。验证时数 `.katex` 元素和 `.mermaid svg` 数量，不要靠截图 OCR 判断（OCR 会把渲染好的公式读成源码样式）。
+5. **CDN 国内不可达**：Mermaid 的 npmmirror 路径（`mermaid/10/files/dist/mermaid.min.js`）实测连不通；pico.css 与 vis-network 的 npmmirror 路径均 404，而 vis-network 的正确 JS 路径是 `dist/vis-network.min.js`（`dist/dist/` 是错的）。现在 Mermaid/KaTeX/pico/vis 统一 jsDelivr 优先、npmmirror 次之、unpkg 兜底，每个源带超时——只靠 `onerror` 会在不回调的源上永久卡住。验证时数 `.katex` 元素和 `.mermaid svg` 数量，不要靠截图 OCR 判断（OCR 会把渲染好的公式读成源码样式）。
 6. **打包后必须解压到独立目录冒烟**：只测工作目录不算数。中文文件名、相对路径、`.nojekyll` 都可能在打包后出问题。
 7. **build_handbook.py 早期版本不识别新字段**：深度片段、诊断页原先只在单书 companion 里有入口。本项目已给 `build_handbook.py` 补上 `__diagnosis__` 页面映射、侧边栏入口和诊断 JS；换环境复用时，先用 `#/book/<key>/diagnosis` 点一遍，避免总入口显示「页面不存在」。深度片段仍在概念页内部，不需要总入口另加入口。
 8. **OCR 乱码 PDF 不要硬抽文本**：数学/扫描版 PDF 抽出来是 `cid:` 或方框，弃用文本，改 Read 按页读图。用乱码硬撑会教错人。
@@ -170,3 +170,4 @@ zhishu/
 15. **搜索不做分词就搜不到整句**：英文按空格切，中文没有分隔符，直接 `includes(整句)` 几乎必然 0 条。现在 `tokenizeQuery` 先按标点切、中文长词拆二元组、过滤"的/是/什么/怎么"等停用词，再按命中词数排序；`hlSnippet` 出带 `<mark>` 的片段，`applyPendingHighlight` 在跳转后滚到首个命中。改搜索时这四段要一起看，只改一处会得到"有结果但点进去没定位"的半成品。
 16. **同义词表会带噪声，必须分层打分**：把同义命中与精确命中混在一个总分里，一页「概念」堆出的同义分能压过真正写着该词的页。现在按 精确 100 / 同义 30 / 二元组 1（上限 20）分层，精确永远在前。另一个坑：同义词组写成"定义/概念/含义/解释/说明"这种大杂烩，会把"解释一下"这类段落全召回，每组控制在 3–5 个真正等价的词。
 17. **搜索结果组头的两个坑**：内部页的 `page` 是 `glossary` 这种单段字符串，`page.split('/')[1]` 会得到 undefined，标题就渲染成 "undefined"——取值要判断段数。另一个坑是术语表/速查表词频天然高，按最高分排组会把章节压到后面，参考类分组要单独降权（现在 ×0.55）。
+18. **单书 Pages 目录做多书总入口时「未发现任何书」**：`build_handbook.py` 的 `discover` 原先把子目录里的 `index.html` 排除在伴侣候选之外，而 B 交付形态的书目录恰恰只有一个 `index.html`（根目录必须是 `index.html` 才能托管）。1.4.1 已加回退：目录内没有任何 `*学习伴侣.html` 时，把 `index.html` 当伴侣；两种文件都在时仍优先命名明确的那个。

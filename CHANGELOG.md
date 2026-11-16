@@ -3,6 +3,27 @@
 改动规则：动 `SKILL.md`、`references/`、`scripts/` 任一处，都在这里加一条，并把 `SKILL.md` frontmatter 的 `version` 同步。
 生成物里 `ZS_VERSION` 常量会写进页面，用于判断某个 HTML 是哪一版产出的。
 
+## 1.4.1 — 2026-11-16
+
+**CDN 源修正 + 单书 index.html 兼容**
+
+1. Mermaid 首源换成 jsDelivr `mermaid@10.9.1`。npmmirror 的 `mermaid/10/files/dist/mermaid.min.js` 实测连不通（curl 返回 000），放首位等于每次渲染先白等 6 秒超时才回退；`build_companion.py` 另给每个源加 4 秒超时（原来只靠 `onerror`，不回调的源会让 `mermaidState` 永久停在 loading）。
+2. pico.css 与 vis-network 的 npmmirror 地址均 404，且 vis-network 的 JS 正确路径是 `dist/vis-network.min.js`（原先写成 `dist/dist/`）。两者改走 jsDelivr。
+3. KaTeX 的 css/js 数组把 jsDelivr 提到首位。npmmirror 可用但首源慢，拖的是首屏公式。
+4. `build_handbook.py` 的 `discover` 支持单书 Pages 形态：子目录里只有 `index.html`、没有 `*学习伴侣.html` 时不再跳过该书，回退把 `index.html` 当伴侣。修掉「整本书按 B 形态交付后再做多书总入口，脚本报未发现任何书」。
+5. 两个脚本的 `ZS_VERSION` 与 `SKILL.md` frontmatter 同步到 1.4.1。第 1–3 条在单书产物上先落地，本版一并归入记录。
+
+实测：
+
+```
+单书（神经网络 13 章，2-2-1 网络数值全对齐）
+  修复前  pico/vis 404、Mermaid 首源不回调，控制台有 error
+  修复后  冒烟 15/15，KaTeX 106 个 0 错误，Mermaid 渲染成功，390px 无横向溢出
+总入口（同一书目录作为子目录）
+  discover 找到 1 本，产出 342 KB index.html
+  ch01 Mermaid 渲染 / ch11 公式 0 错误 / 测验判题正常 / 控制台 0 error
+```
+
 ## 1.4.0 — 2026-11-13
 
 **搜索结果：按章节分组 + 真实标题**

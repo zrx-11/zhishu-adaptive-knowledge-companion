@@ -573,8 +573,8 @@ _SHELL = r"""<!DOCTYPE html>
 <link rel="icon" href="data:,">
 <title>__TITLE__</title>
 <link rel="stylesheet" href="https://registry.npmmirror.com/katex/0.16.9/files/dist/katex.min.css">
-<link rel="stylesheet" href="https://registry.npmmirror.com/picocss/2.0.6/dist/css/pico.min.css">
-<link rel="stylesheet" href="https://registry.npmmirror.com/vis-network/9.1.9/dist/dist/vis-network.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.0.6/css/pico.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vis-network@9.1.9/dist/dist/vis-network.min.css">
 <style>
 :root{
   --bg:#f7f7f8; --panel:#ffffff; --text:#1f2328; --muted:#6b7280;
@@ -746,7 +746,7 @@ const store = {
   get(k){ try{ return JSON.parse(localStorage.getItem(SLUG+':'+k)||'null') }catch(e){ return null } },
   set(k,v){ try{ localStorage.setItem(SLUG+':'+k, JSON.stringify(v)) }catch(e){} }
 };
-const ZS_VERSION = '1.4.0';
+const ZS_VERSION = '1.4.1';
 /* ---------- 进度导出 / 导入（跨设备） ---------- */
 function exportProgress(){
   const data = {};
@@ -852,13 +852,13 @@ function renderMath(){
   if(katexLoading) return;
   katexLoading = true;
   const cssUrls = [
-    'https://registry.npmmirror.com/katex/0.16.9/files/dist/katex.min.css',
     'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css',
+    'https://registry.npmmirror.com/katex/0.16.9/files/dist/katex.min.css',
     'https://unpkg.com/katex@0.16.9/dist/katex.min.css'
   ];
   const jsUrls = [
-    'https://registry.npmmirror.com/katex/0.16.9/files/dist/katex.min.js',
     'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js',
+    'https://registry.npmmirror.com/katex/0.16.9/files/dist/katex.min.js',
     'https://unpkg.com/katex@0.16.9/dist/katex.min.js'
   ];
   let ci = 0, ji = 0;
@@ -1025,17 +1025,18 @@ let networkLoaded = false;
 function loadVisNetwork(cb){
   if(networkLoaded){ cb(); return; }
   const urls = [
-    'https://registry.npmmirror.com/vis-network/9.1.9/dist/dist/vis-network.min.js',
-    'https://cdn.jsdelivr.net/npm/vis-network@9.1.9/standalone/umd/vis-network.min.js',
-    'https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js'
+    'https://cdn.jsdelivr.net/npm/vis-network@9.1.9/dist/vis-network.min.js',
+    'https://unpkg.com/vis-network@9.1.9/dist/vis-network.min.js',
+    'https://registry.npmmirror.com/vis-network/9.1.9/dist/vis-network.min.js'
   ];
   let i = 0;
   const tryNext = () => {
     if(i >= urls.length) return;
     const s = document.createElement('script');
     s.src = urls[i++];
-    s.onload = () => { networkLoaded = true; cb(); };
-    s.onerror = () => { s.remove(); tryNext(); };
+    const timer = setTimeout(() => { s.onload = null; s.onerror = null; s.remove(); tryNext(); }, 4000);
+    s.onload = () => { clearTimeout(timer); networkLoaded = true; cb(); };
+    s.onerror = () => { clearTimeout(timer); s.remove(); tryNext(); };
     document.head.appendChild(s);
   };
   tryNext();
@@ -1477,16 +1478,17 @@ function renderMermaid(){
         .catch(()=>{ el.textContent=code; });
     });
   }catch(e){} };
-  const urls=['https://registry.npmmirror.com/mermaid/10/files/dist/mermaid.min.js',
-              'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js',
-              'https://unpkg.com/mermaid@10/dist/mermaid.min.js'];
-  let ui=0;
+  const urls=['https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js',
+              'https://registry.npmmirror.com/mermaid/10.9.1/files/dist/mermaid.min.js',
+              'https://unpkg.com/mermaid@10.9.1/dist/mermaid.min.js'];
+  let ui=0, done=false;
   const tryNext=()=>{
-    if(ui>=urls.length) return;
+    if(done || ui>=urls.length) return;
     const s=document.createElement('script');
     s.src=urls[ui++];
-    s.onload=boot;
-    s.onerror=()=>{ s.remove(); tryNext(); };
+    const timer=setTimeout(()=>{ if(done) return; s.onload=null; s.onerror=null; s.remove(); tryNext(); }, 4000);
+    s.onload=()=>{ done=true; clearTimeout(timer); boot(); };
+    s.onerror=()=>{ clearTimeout(timer); s.remove(); tryNext(); };
     document.head.appendChild(s);
   };
   tryNext();
