@@ -26,7 +26,7 @@ INIT_JS = """<script id="zs-visual-init">
     var B=document.body, H=document.documentElement;
     if(!B.dataset.theme && !H.dataset.theme) B.dataset.theme='dark';
     var EMOJI=/[\\u{1F000}-\\u{1FAFF}\\u{2600}-\\u{27BF}\\u{2B00}-\\u{2BFF}\\u{FE0F}\\u{200D}]/gu;
-    var scope=document.querySelectorAll('header, .topbar, .topbar-fixed, #topbar, .sidebar, .tabs, .hdr-right, .card-actions, .card-controls');
+    var scope=document.querySelectorAll('header, .topbar, .topbar-fixed, #topbar, .sidebar, .tabs, .hdr-right, .card-actions, .card-controls, .section-title, .card .icon, .icon-label');
     for(var i=0;i<scope.length;i++){
       var w=document.createTreeWalker(scope[i],NodeFilter.SHOW_TEXT,null,false), n;
       while(n=w.nextNode()){
@@ -35,7 +35,7 @@ INIT_JS = """<script id="zs-visual-init">
         }
       }
     }
-    var btn=document.getElementById('theme-btn');
+    var btn=document.getElementById('theme-btn')||document.getElementById('theme')||document.getElementById('themeToggle');
     function label(){
       if(!btn) return;
       var light=B.dataset.theme==='light'||H.getAttribute('data-theme')==='light'||B.dataset.theme==='';
@@ -56,9 +56,15 @@ def build_style(css: str) -> str:
     return f'{STYLE_OPEN}\n{css}\n{STYLE_CLOSE}'
 
 
-def apply_file(path: Path, css: str, dry_run: bool = False) -> bool:
+def apply_file(path: Path, css: str, dry_run: bool = False, force_dark: bool = False) -> bool:
     s = path.read_text(encoding="utf-8", errors="replace")
+    orig = s
     style = build_style(css)
+
+    if force_dark:
+        # 只改初始属性；页面自己的主题按钮仍可在运行时切回浅色。
+        s = re.sub(r'(<html[^>]*\bdata-theme=")light(")', r'\1dark\2', s, count=1)
+        s = re.sub(r'(<body[^>]*\bdata-theme=")light(")', r'\1dark\2', s, count=1)
 
     style_re = re.compile(r'<style id="zs-visual-theme">.*?</style>', re.S)
     if style_re.search(s):
@@ -76,7 +82,7 @@ def apply_file(path: Path, css: str, dry_run: bool = False) -> bool:
             raise ValueError("没有 </body>，不是完整 HTML 页面")
         s2 = s2.replace("</body>", INIT_JS + "\n</body>", 1)
 
-    if s2 == s:
+    if s2 == orig:
         return False
     if not dry_run:
         path.write_text(s2, encoding="utf-8")
@@ -100,6 +106,7 @@ def main():
     ap.add_argument("--root", help="目录；默认只处理 index.html 与 *学习伴侣.html")
     ap.add_argument("--all-html", action="store_true", help="处理目录内全部 HTML")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--force-dark", action="store_true", help="把初始 data-theme=light 改成 dark；运行时仍可切浅色")
     args = ap.parse_args()
 
     if not CSS_PATH.exists():
@@ -121,7 +128,7 @@ def main():
             continue
         seen.add(p)
         try:
-            ok = apply_file(p, css, args.dry_run)
+            ok = apply_file(p, css, args.dry_run, args.force_dark)
             print(("APPLY " if ok else "SAME  ") + str(p))
             if ok:
                 changed += 1

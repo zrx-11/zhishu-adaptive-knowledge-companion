@@ -33,6 +33,9 @@ python3 scripts/apply_visual_theme.py --root <知枢目录>
 
 # 目录：处理全部 HTML（含章节页、实验页）
 python3 scripts/apply_visual_theme.py --root <知枢目录> --all-html
+
+# 页面初始是浅色时，改成深色初始态（运行时仍可切浅色）
+python3 scripts/apply_visual_theme.py --root <知枢目录> --force-dark
 ```
 
 脚本做三件事：
@@ -40,6 +43,7 @@ python3 scripts/apply_visual_theme.py --root <知枢目录> --all-html
 1. 在 `</head>` 前插入 `<style id="zs-visual-theme">`，内容是 `assets/visual-theme.css`。
 2. 在 `</body>` 前插入 `<script id="zs-visual-init">`，设置默认深色、清理界面 emoji、同步主题按钮文案。
 3. 重复执行时替换而不是追加，页面里只会有一份。
+4. `--force-dark` 只把初始 `data-theme="light"` 改成 `dark`，不锁死主题按钮；用户仍可在页面上切回浅色。
 
 建议顺序：`build_companion.py` / `build_handbook.py` → `apply_visual_theme.py` → `verify_handbook.py` → `package_delivery.py`。如果先打包再注入，zip 里会是旧皮肤。
 

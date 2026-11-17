@@ -1,7 +1,7 @@
 ---
 name: zhishu
 display_name: 知枢学习系统
-version: 1.6.0
+version: 1.6.1
 description: 把任何学习材料——一个知识点、一组题、一份课件、一本书、多本书——变成"按依赖带你走、答错倒推根因、难点从零推透"的单文件交互学习网页。自动识别输入形态并选最轻的流水线：知识点走第一性原理推导、题目走诊断、课件走单章、书走整书成课、多书走整合入口。适用于"讲一下这个概念""把这堆题做成诊断卡""把这份课件做成能学的页""把这本书吃透""把几本书整合成一门课"。
 ---
 
@@ -60,6 +60,9 @@ python3 scripts/apply_visual_theme.py --root <知枢目录>
 
 # 目录：全部 HTML 都处理
 python3 scripts/apply_visual_theme.py --root <知枢目录> --all-html
+
+# 页面初始是浅色：改成深色初始态，主题按钮仍可切回浅色
+python3 scripts/apply_visual_theme.py --file <page.html> --force-dark
 ```
 
 脚本会插入 `#zs-visual-theme` 和 `#zs-visual-init`，重复执行只替换不叠加。建议顺序：构建 → 注入视觉 → 验证 → 打包。先打包再注入，zip 里会是旧皮肤。

@@ -3,6 +3,13 @@
 改动规则：动 `SKILL.md`、`references/`、`scripts/` 任一处，都在这里加一条，并把 `SKILL.md` frontmatter 的 `version` 同步。
 生成物里 `ZS_VERSION` 常量会写进页面，用于判断某个 HTML 是哪一版产出的。
 
+## 1.6.1 — 2026-11-18
+
+1. `visual-theme.css` 补齐旧版单页的 `.hero` / `.header` / `.page-header` 深色覆盖，避免蓝色渐变页头和深色正文割裂。
+2. 统计数字、分区标题、卡片图标统一到钴蓝/鲸青；清掉卡片与分区标题里的装饰 emoji，空图标容器自动隐藏。
+3. `apply_visual_theme.py` 支持 `#theme` / `#themeToggle` 别名，`--force-dark` 只改初始态，不锁死主题切换。
+4. 用同一套 CSS 回归 26 个同源学习仓库、约 116 个 HTML 页面，桌面 1440 与手机 390 均无横向溢出。
+
 ## 1.6.0 — 2026-11-18
 
 **深色视觉层 + 可复用注入脚本**

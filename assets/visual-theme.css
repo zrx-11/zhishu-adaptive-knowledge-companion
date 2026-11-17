@@ -122,6 +122,38 @@ header,
   box-shadow: 0 1px 0 var(--border);
 }
 
+/* 通用 hero / 页头：旧版单页常用 .header 或 .hero，不是 header 标签 */
+.hero,
+.header,
+.page-header,
+.hero-block {
+  background: var(--bg) !important;
+  color: var(--text) !important;
+  border-bottom: 1px solid var(--border);
+  box-shadow: none !important;
+}
+
+.hero h1,
+.header h1,
+.page-header h1,
+.hero p,
+.header p,
+.page-header p {
+  color: var(--text) !important;
+}
+
+.section-title {
+  border-left-color: var(--accent) !important;
+  color: var(--text) !important;
+}
+
+.stat .num,
+.metric .num,
+.kpi .value {
+  color: var(--accent2) !important;
+}
+
+
 .brand span,
 .sub,
 .meta,
@@ -358,6 +390,11 @@ summary {
 
 .empty {
   color: var(--muted) !important;
+}
+
+.card .icon:empty,
+.icon-label:empty {
+  display: none !important;
 }
 
 * {
