@@ -448,3 +448,32 @@ body[data-theme="dark"] .page .card {
     background-image: none !important;
   }
 }
+
+/* 多书总入口：窄屏下书籍标签横滑，不再堆成四五行 */
+@media (max-width: 720px) {
+  header .tabs,
+  .tabs {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-width: 100%;
+    padding-bottom: 4px;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  header .tabs > *,
+  .tabs > * {
+    flex: 0 0 auto;
+  }
+
+  .tabs::-webkit-scrollbar {
+    height: 4px;
+  }
+  .tabs::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 4px;
+  }
+}
+
