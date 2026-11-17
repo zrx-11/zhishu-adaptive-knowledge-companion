@@ -1,0 +1,413 @@
+/* 知枢 · 深色视觉层 · 只改样式，不改结构
+   适用：知枢多书总入口 / 单书伴侣 / 旧版从零推导页。
+   设计口径：深色底、钴蓝+鲸青、衬线标题、点阵底纹、无玻璃拟态。 */
+
+:root,
+html[data-theme="dark"],
+body[data-theme="dark"] {
+  --bg: #080d1a;
+  --bg-soft: #0b1222;
+  --bg2: #0b1222;
+  --bg3: #16213b;
+  --panel: #101a2f;
+  --panel-2: #16213b;
+  --card: #101a2f;
+  --text: #f1f5ff;
+  --text2: #c7d0e5;
+  --text3: #8494b4;
+  --muted: #8494b4;
+  --border: #253252;
+  --accent: #5c7cff;
+  --accent-strong: #4d6bff;
+  --accent2: #16c7d9;
+  --accent3: #2bd9a5;
+  --accent-soft: #18264a;
+  --ok: #2bd9a5;
+  --bad: #ff7088;
+  --warn: #f5b35c;
+  --danger: #ff7088;
+  --code-bg: #0a1120;
+  --dot: rgba(92, 124, 255, .12);
+  --radius: 10px;
+  --font-display: "Noto Serif CJK SC", "Noto Serif SC", "Songti SC", "STSong", Georgia, serif;
+  --font-body: "Noto Sans CJK SC", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --ink: #f1f5ff;
+  --ink-2: #c7d0e5;
+  --ink-3: #8494b4;
+  --paper: #080d1a;
+  --paper-2: #101a2f;
+  --wash: #0b1222;
+  --line: #253252;
+  --line-soft: #1b2742;
+}
+
+html[data-theme="light"],
+body[data-theme="light"],
+body[data-theme=""] {
+  --bg: #edf1f8;
+  --bg-soft: #e4eaf5;
+  --bg2: #e4eaf5;
+  --bg3: #dbe4f2;
+  --panel: #f9fbff;
+  --panel-2: #f1f5fc;
+  --card: #f9fbff;
+  --text: #111827;
+  --text2: #26324a;
+  --text3: #5b6b86;
+  --muted: #5b6b86;
+  --border: #c9d4e8;
+  --accent: #3950de;
+  --accent-strong: #2f43c9;
+  --accent2: #0e8fa4;
+  --accent3: #12805f;
+  --accent-soft: #dbe4ff;
+  --ok: #12805f;
+  --bad: #c02a44;
+  --warn: #9a5b00;
+  --danger: #c02a44;
+  --code-bg: #eef2f9;
+  --dot: rgba(57, 80, 222, .10);
+  --ink: #111827;
+  --ink-2: #26324a;
+  --ink-3: #5b6b86;
+  --paper: #edf1f8;
+  --paper-2: #f9fbff;
+  --wash: #e4eaf5;
+  --line: #c9d4e8;
+  --line-soft: #dbe4f2;
+}
+
+html,
+body {
+  background-color: var(--bg) !important;
+  color: var(--text) !important;
+}
+
+body {
+  font-family: var(--font-body) !important;
+  background-image: radial-gradient(circle at 1px 1px, var(--dot) 1px, transparent 1.2px);
+  background-size: 26px 26px;
+  background-attachment: fixed;
+  font-size: 16px;
+  line-height: 1.72;
+}
+
+h1, h2, h3, h4, h5,
+.page h1, .page h2, .page h3,
+.brand, .hero-title, .title {
+  font-family: var(--font-display) !important;
+  letter-spacing: -.012em;
+}
+
+h1, h2, h3, h4, h5,
+.page h1, .page h2, .page h3 {
+  color: var(--text) !important;
+}
+
+header,
+.topbar,
+.topbar-fixed,
+#topbar,
+.site-header {
+  background: var(--bg) !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+
+header,
+.topbar,
+.topbar-fixed,
+#topbar {
+  box-shadow: 0 1px 0 var(--border);
+}
+
+.brand span,
+.sub,
+.meta,
+.muted,
+.text-muted,
+.card .meta,
+.book-card .meta {
+  color: var(--muted) !important;
+}
+
+.sidebar,
+aside.sidebar,
+#sidebar,
+.rail {
+  background: var(--bg-soft) !important;
+  border-color: var(--border) !important;
+}
+
+.main,
+main.main,
+#view,
+.view {
+  background: transparent !important;
+  color: var(--text) !important;
+}
+
+.page,
+.page * {
+  border-color: var(--border);
+}
+
+.page h1 {
+  border-bottom-color: var(--border) !important;
+}
+
+a {
+  color: var(--accent) !important;
+}
+
+a:hover {
+  color: var(--accent2) !important;
+}
+
+.tab,
+.tabs button,
+.tabs .tab,
+.nav-item,
+#theme-btn,
+#nav-toggle,
+button {
+  color: var(--text) !important;
+  background: var(--panel) !important;
+  border-color: var(--border) !important;
+}
+
+.tab:hover,
+.tabs button:hover,
+.nav-item:hover,
+button:hover {
+  background: var(--accent-soft) !important;
+}
+
+.tab.active,
+.tabs .tab.active,
+.nav-item.active,
+button.primary,
+.btn.primary,
+.quiz-check {
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
+  color: #fff !important;
+}
+
+.nav-item.active,
+.tab.active {
+  color: #fff !important;
+}
+
+.nav-sec,
+.nav-label,
+.sidebar .sub {
+  color: var(--muted) !important;
+}
+
+#progress-bar,
+.bar,
+.progress {
+  background: var(--border) !important;
+}
+
+#progress-bar > div,
+#progress-fill,
+.bar > i,
+.progress > i {
+  background: var(--accent) !important;
+}
+
+input,
+select,
+textarea,
+#q,
+#glossary-filter,
+.search,
+.search input {
+  background: var(--bg-soft) !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+
+input::placeholder,
+textarea::placeholder,
+#q::placeholder,
+#glossary-filter::placeholder {
+  color: var(--text3) !important;
+}
+
+.page table,
+table {
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+
+.page th,
+th {
+  background: var(--panel-2) !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+
+.page td,
+td {
+  border-color: var(--border) !important;
+}
+
+.page code,
+code,
+kbd,
+samp {
+  background: var(--code-bg) !important;
+  color: #dbe6ff !important;
+}
+
+html[data-theme="light"] code,
+body[data-theme="light"] code,
+body[data-theme=""] code,
+html[data-theme="light"] .page code,
+body[data-theme="light"] .page code,
+body[data-theme=""] .page code {
+  color: #17223b !important;
+}
+
+.page pre,
+pre {
+  background: var(--code-bg) !important;
+  color: #dbe6ff !important;
+  border: 1px solid var(--border);
+}
+
+html[data-theme="light"] pre,
+body[data-theme="light"] pre,
+body[data-theme=""] pre {
+  color: #17223b !important;
+}
+
+.page blockquote,
+blockquote {
+  background: var(--accent-soft) !important;
+  border-left-color: var(--accent) !important;
+  color: var(--text) !important;
+}
+
+.mermaid,
+.mermaid-hint {
+  background: var(--code-bg) !important;
+  color: var(--muted) !important;
+  border-color: var(--border) !important;
+}
+
+.quiz-item,
+.path-step,
+.book-card,
+.concept-card,
+.pattern-card,
+.term-card,
+.diag-card,
+.search-hit,
+.card,
+.box,
+.panel,
+.fc-front,
+.fc-back,
+details,
+summary {
+  background: var(--panel) !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+
+.book-card:hover,
+.concept-card:hover,
+.quiz-item:hover {
+  border-color: var(--accent) !important;
+}
+
+.quiz-explain,
+.source-badge,
+.glossary-ref,
+.card-counts,
+.source,
+.citation {
+  color: var(--muted) !important;
+  border-color: var(--border) !important;
+}
+
+.quiz-blank,
+.quiz-opts label,
+.quiz-opts label:hover {
+  background: var(--bg-soft) !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+
+.fc-back {
+  background: var(--accent-soft) !important;
+}
+
+.tag,
+.pill,
+.badge {
+  background: var(--panel-2) !important;
+  border-color: var(--border) !important;
+  color: var(--text2) !important;
+}
+
+.empty {
+  color: var(--muted) !important;
+}
+
+* {
+  scrollbar-color: #2a3a5f transparent;
+  scrollbar-width: thin;
+}
+
+::selection {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* 深色主题下代码高亮不要被旧样式压成白底 */
+html[data-theme="dark"] .page pre,
+body[data-theme="dark"] .page pre {
+  background: var(--code-bg) !important;
+}
+
+/* 旧版页面里的白色卡片兜底 */
+html[data-theme="dark"] .page .card,
+body[data-theme="dark"] .page .card {
+  background: var(--panel) !important;
+}
+
+@media (max-width: 820px) {
+  body {
+    background-size: 22px 22px;
+    font-size: 15.5px;
+  }
+  header,
+  .topbar,
+  .topbar-fixed {
+    background: var(--bg) !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: .001ms !important;
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+@media print {
+  html, body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  body {
+    background-image: none !important;
+  }
+}
