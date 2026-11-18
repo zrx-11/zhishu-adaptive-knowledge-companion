@@ -36,6 +36,7 @@ def main():
     ap.add_argument("--index", required=True)
     ap.add_argument("--chromium", default=None)
     ap.add_argument("--report", default=None)
+    ap.add_argument("--expect-offline", action="store_true", help="断言整页不外联（配合 build_*.py --offline 使用）")
     args = ap.parse_args()
 
     url = "file://" + os.path.abspath(args.index)
@@ -53,6 +54,15 @@ def main():
         browser = p.chromium.launch(**kw)
         page = browser.new_page()
         errors = []
+        blocked = []
+        if args.expect_offline:
+            def _block(r):
+                if r.request.url.startswith("http"):
+                    blocked.append(r.request.url)
+                    r.abort()
+                else:
+                    r.continue_()
+            page.route("**/*", _block)
 
         def on_console(m):
             if m.type != "error":
@@ -341,6 +351,9 @@ def main():
             page.keyboard.press("Escape")
             page.wait_for_timeout(200)
             check("ESC 关闭出处卡", page.query_selector(".cite-pop") is None)
+
+        if args.expect_offline:
+            check("离线无外链请求", len(blocked) == 0, "已尝试 " + ", ".join(blocked[:3]) if blocked else "全程未发起 http 请求")
 
         check("控制台无错误", len(errors) == 0, " || ".join(errors[:5]))
         browser.close()

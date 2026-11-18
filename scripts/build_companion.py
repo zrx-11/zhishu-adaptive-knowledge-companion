@@ -14,6 +14,7 @@
 import argparse
 import html as html_mod
 import json
+import vendor_assets
 import os
 import re
 import sys
@@ -792,7 +793,7 @@ const store = {
   get(k){ try{ return JSON.parse(localStorage.getItem(SLUG+':'+k)||'null') }catch(e){ return null } },
   set(k,v){ try{ localStorage.setItem(SLUG+':'+k, JSON.stringify(v)) }catch(e){} }
 };
-const ZS_VERSION = '1.7.0';
+const ZS_VERSION = '1.8.0';
 /* ---------- 进度导出 / 导入（跨设备） ---------- */
 function exportProgress(){
   const data = {};
@@ -894,6 +895,7 @@ let katexLoading = false, katexReady = false;
 function renderMath(){
   const hasMath = document.querySelector('.katex-inline, .katex-block');
   if(!hasMath) return;
+  if(typeof katex !== 'undefined'){ doRenderMath(); return; }
   if(katexReady){ doRenderMath(); return; }
   if(katexLoading) return;
   katexLoading = true;
@@ -1070,6 +1072,7 @@ function initQuizzes(rid){
 let networkLoaded = false;
 function loadVisNetwork(cb){
   if(networkLoaded){ cb(); return; }
+  if(typeof vis !== 'undefined'){ networkLoaded = true; cb(); return; }
   const urls = [
     'https://cdn.jsdelivr.net/npm/vis-network@9.1.9/dist/vis-network.min.js',
     'https://unpkg.com/vis-network@9.1.9/dist/vis-network.min.js',
@@ -1524,6 +1527,7 @@ function renderMermaid(){
         .catch(()=>{ el.textContent=code; });
     });
   }catch(e){} };
+  if(typeof mermaid !== 'undefined'){ boot(); return; }
   const urls=['https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js',
               'https://registry.npmmirror.com/mermaid/10.9.1/files/dist/mermaid.min.js',
               'https://unpkg.com/mermaid@10.9.1/dist/mermaid.min.js'];
@@ -1603,6 +1607,9 @@ def main():
     ap = argparse.ArgumentParser(description="zhishu 知枢：组装单文件 HTML 学习伴侣")
     ap.add_argument("--manifest", required=True, help="manifest.json 路径")
     ap.add_argument("--out", required=True, help="输出 HTML 路径")
+    ap.add_argument("--offline", choices=["none", "katex", "all"], default="none",
+                    help="katex=内联 KaTeX+Pico；all=再加 vis-network（需先跑 fetch_vendor.py）")
+    ap.add_argument("--offline-mermaid", action="store_true", help="把所有库都内联（需 fetch_vendor.py --mermaid）")
     args = ap.parse_args()
 
     mdir = os.path.dirname(os.path.abspath(args.manifest))
@@ -1632,6 +1639,19 @@ def main():
     data = {"manifest": manifest, "pages": pages, "base_dir": base}
     html_out = build_html(data)
 
+    if args.offline in ("katex", "all"):
+        parts = [vendor_assets.katex_css(), vendor_assets.pico_css(), vendor_assets.katex_js()]
+        if args.offline == "all":
+            parts.append(vendor_assets.vis_js())
+        if args.offline_mermaid:
+            parts.append(vendor_assets.mermaid_js())
+        blob = "\n".join(x for x in parts if x)
+        if not blob.strip():
+            print("警告：assets/vendor 为空，先跑 python3 scripts/fetch_vendor.py", file=sys.stderr)
+        else:
+            html_out = vendor_assets.strip_cdn_links(html_out)
+            html_out = html_out.replace("</head>", blob + "\n</head>", 1)
+
     os.makedirs(os.path.dirname(os.path.abspath(args.out)) or ".", exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as f:
         f.write(html_out)
@@ -1641,7 +1661,10 @@ def main():
     print(f"  章节 {len(manifest.get('chapters', []))} · 概念 {len(manifest.get('concepts', []))} · "
           f"测验 {len(manifest.get('quizzes', []))} · 抽认卡 {len(manifest.get('flashcards', []))} · "
           f"术语 {len(manifest.get('glossary', []))}")
-    print(f"  文件大小 {kb/1024:.1f} KB（单文件，可离线打开；公式需联网加载 KaTeX）")
+    if args.offline in ("katex", "all"):
+        print(f"  文件大小 {kb/1024:.1f} KB（离线内联：KaTeX 公式与图谱不走 CDN）")
+    else:
+        print(f"  文件大小 {kb/1024:.1f} KB（单文件，可离线打开；公式需联网加载 KaTeX）")
     return 0
 
 

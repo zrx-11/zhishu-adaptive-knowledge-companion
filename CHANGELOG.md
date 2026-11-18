@@ -3,6 +3,18 @@
 改动规则：动 `SKILL.md`、`references/`、`scripts/` 任一处，都在这里加一条，并把 `SKILL.md` frontmatter 的 `version` 同步。
 生成物里 `ZS_VERSION` 常量会写进页面，用于判断某个 HTML 是哪一版产出的。
 
+## 1.8.0 — 2026-11-19
+
+**离线内联：断网也能渲染公式与图谱**
+
+1. 新增 `scripts/fetch_vendor.py`：把 KaTeX 0.16.11（js 269KB / css 23KB / 20 个 woff2 字体 254KB）、Pico 2.0.6（80KB）、vis-network 9.1.9（673KB）下到 `assets/vendor/`；`--mermaid` 追加 Mermaid 10.9.1（3.3MB）。
+2. 新增 `scripts/vendor_assets.py`：KaTeX CSS 里的 20 个 woff2 转 base64 data URI，同时删掉 woff/ttf 分支（否则离线引用不存在的文件，公式字体退回默认、符号错位）。
+3. 两个构建器加 `--offline katex|all` 与 `--offline-mermaid`：内联后删掉 CDN `<link>`，把内容塞进 `<head>`；KaTeX / vis / Mermaid 三个加载器都加了"全局已定义就直接用"的短路，不再白等 4 秒超时。
+4. 产物从 68.5KB → 1449.1KB（1.45MB），代价固定，与书的大小无关；不加 `--offline` 时行为完全不变。
+5. `verify_handbook.py` 加 `--expect-offline`：整轮拦截 http 请求，断言"全程未发起外链"；离线产物 38/38 通过，默认 CDN 产物 37/37 通过。
+6. 实测（全部拦截 http 后）：单书 2 个 `.katex` 正常渲染、知识图谱 canvas 正常、总入口公式与 claim 弹卡正常，0 次外链请求，0 条 pageerror。
+7. 踩坑清单加第 26 条（只内联 js/css 不内联字体等于没做）。
+
 ## 1.7.0 — 2026-11-19
 
 **句级出处 + 内容层审计**（价值提取自 `ai-azhou/pdf-to-interactive-web`，MIT）

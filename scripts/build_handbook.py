@@ -13,6 +13,7 @@
 """
 import argparse
 import json
+import vendor_assets
 import os
 import re
 import sys
@@ -391,6 +392,9 @@ def main():
     ap.add_argument("--order", default=None, help="只纳入指定前缀/目录名，逗号分隔，如 01,02")
     ap.add_argument("--label", action="append", default=[], help="自定义标签，格式 目录名=标签 或 key=标签")
     ap.add_argument("--no-md", action="store_true", help="不生成 index.md")
+    ap.add_argument("--offline", choices=["none", "katex", "all"], default="none",
+                    help="katex=内联 KaTeX+Pico；all=再加 vis-network（需先跑 fetch_vendor.py）")
+    ap.add_argument("--offline-mermaid", action="store_true", help="连 Mermaid 一起内联")
     args = ap.parse_args()
 
     root = os.path.abspath(args.root)
@@ -488,6 +492,19 @@ def main():
             sources[f'{b["key"]}:{cid}'] = {"n": i, "page": c.get("page", ""),
                                             "quote": c.get("quote", ""), "zh": c.get("zh", "")}
     html = html.replace("__SOURCES__", dump(sources))
+
+    if args.offline in ("katex", "all"):
+        parts = [vendor_assets.katex_css(), vendor_assets.pico_css(), vendor_assets.katex_js()]
+        if args.offline == "all":
+            parts.append(vendor_assets.vis_js())
+        if args.offline_mermaid:
+            parts.append(vendor_assets.mermaid_js())
+        blob = "\n".join(x for x in parts if x)
+        if blob.strip():
+            html = vendor_assets.strip_cdn_links(html)
+            html = html.replace("</head>", blob + "\n</head>", 1)
+        else:
+            print("警告：assets/vendor 为空，先跑 python3 scripts/fetch_vendor.py", file=sys.stderr)
 
     out_path = args.out or os.path.join(root, "index.html")
     with open(out_path, "w", encoding="utf-8") as f:
@@ -697,7 +714,7 @@ function stKey(book,k){ return 'hb:'+book+':'+k; }
 function getState(book){
   return { visited: store.get(stKey(book,'visited'))||[], quiz: store.get(stKey(book,'quiz'))||{}, cards: store.get(stKey(book,'cards'))||{} };
 }
-const ZS_VERSION = '1.7.0';
+const ZS_VERSION = '1.8.0';
 /* ---------- 进度导出 / 导入（跨设备） ---------- */
 function exportProgress(){
   const data = {};
@@ -1289,6 +1306,7 @@ function renderMermaid(){
   if(window.mermaid){ run(); return; }
   if(mermaidState==='loading') return;
   mermaidState='loading';
+  if(typeof mermaid !== 'undefined'){ boot(); return; }
   const urls=['https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js',
               'https://registry.npmmirror.com/mermaid/10.9.1/files/dist/mermaid.min.js',
               'https://unpkg.com/mermaid@10.9.1/dist/mermaid.min.js'];
@@ -1343,6 +1361,7 @@ window.addEventListener('hashchange', route);
 let katexLoading=false, katexReady=false;
 function renderMath(){
   if(!document.querySelector('.katex-inline, .katex-block')) return;
+  if(typeof katex !== 'undefined'){ doRenderMath(); return; }
   if(katexReady){ doRenderMath(); return; }
   if(katexLoading) return;
   katexLoading=true;

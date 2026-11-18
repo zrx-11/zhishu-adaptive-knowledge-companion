@@ -2,7 +2,7 @@
 
 把学习材料变成"按依赖带你走、答错倒推根因、难点从零推透"的单文件交互学习网页。材料可以是一个知识点、一组题、一份课件、一本书，也可以是多本书。
 
-**当前版本 v1.7.0**（更新记录见 [CHANGELOG.md](CHANGELOG.md)）
+**当前版本 v1.8.0**（更新记录见 [CHANGELOG.md](CHANGELOG.md)）
 
 ## 特性
 
@@ -39,6 +39,14 @@
 - `scripts/audit_content.py`：报"带数字但没有出处"的句子、未被引用的 claim、引用了未定义的 claim、外链数量；跳过标题序号，不把「1.1 第 1 节」误报
 - `references/pedagogy.md` §14 收录 9 类转述错误清单与五类标注约定（原文/推算/示意/读图/解读）
 - 未采用上游的 2500 字硬上限与 7 场景线性结构：知枢要"学完"，不是一个 PDF 一节做一页
+
+**离线内联（v1.8.0）**
+
+- `python3 scripts/fetch_vendor.py` 把 KaTeX（含 20 个 woff2 字体）、Pico、vis-network 下到 `assets/vendor/`
+- 构建加 `--offline katex`（公式）或 `--offline all`（公式+图谱），产物约 1.45MB，**断网后公式照常排版、图谱照常拖动**
+- 字体转成 base64 并删掉 woff/ttf 分支，否则离线时公式会退回默认字体、符号错位
+- Mermaid 3.3MB，默认走 CDN；彻底离线加 `--offline-mermaid`
+- `verify_handbook.py --expect-offline` 拦截全部 http 请求，验证"真的一点都不联网"
 
 **视觉（v1.6.0 起）**
 
@@ -83,7 +91,7 @@ python3 scripts/verify_handbook.py --index <root>/index.html \
 
 ```
 ├── SKILL.md                 # 技能主文档：六层架构、五种输入形态、八阶段流程、23 条踩坑
-├── CHANGELOG.md             # 1.7.0 / 1.6.4 … 1.0.0
+├── CHANGELOG.md             # 1.8.0 / 1.7.0 / 1.6.4 … 1.0.0
 ├── README.md
 ├── assets/
 │   └── visual-theme.css     # 深色视觉层
