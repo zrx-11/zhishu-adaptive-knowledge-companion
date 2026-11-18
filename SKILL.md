@@ -1,7 +1,7 @@
 ---
 name: zhishu
 display_name: 知枢学习系统
-version: 1.6.1
+version: 1.7.0
 description: 把任何学习材料——一个知识点、一组题、一份课件、一本书、多本书——变成"按依赖带你走、答错倒推根因、难点从零推透"的单文件交互学习网页。自动识别输入形态并选最轻的流水线：知识点走第一性原理推导、题目走诊断、课件走单章、书走整书成课、多书走整合入口。适用于"讲一下这个概念""把这堆题做成诊断卡""把这份课件做成能学的页""把这本书吃透""把几本书整合成一门课"。
 ---
 
@@ -128,6 +128,8 @@ python3 scripts/apply_visual_theme.py --root <知枢目录>
 9. **搜索结果分组**：按章节聚合，组头显示命中数，标题用真实章节名而不是 id。术语表、速查表、模式库、抽认卡这类参考页权重降到 0.55，避免词频高的索引页压过正文。
 10. **深色视觉层**：`assets/visual-theme.css` + `scripts/apply_visual_theme.py`，给已构建的页面注入深色 token、衬线标题、点阵底纹和界面 emoji 清理。只改样式，不改内容与路由；默认深色，浅色可切。
 11. **可选课标图谱**：数学和理科材料可以接 cn-math-taxonomy，做法见 `references/taxonomy-integration.md`。
+12. **句级出处**：manifest 里的 `claims[]`（`{id, page, quote, zh}`）给每句事实建账，正文写 `[[cl01]]`，构建后变成可点角标，点击弹出页码、原文原句和中文转述。总入口自动按书前缀化 id（`<书 key>:cl01`），跨书不撞号。写法与 9 类转述错误清单见 `references/pedagogy.md` §14。
+13. **内容层审计**：`scripts/audit_content.py` 扫已构建的页面，报"带数字但没有出处"的句子、定义了却没被引用的 claim、引用了但没定义的 claim、外链数量。它和 `verify_handbook.py` 分工：后者验功能（能不能点、有没有报错），前者验内容对不对得起出处。
 
 ## 深度通道触发判据
 
@@ -163,7 +165,8 @@ zhishu/
 │   ├── build_companion.py            # 单书 HTML 组装（含 KaTeX/诊断/深度片段）
 │   ├── build_handbook.py             # 多书总入口
 │   ├── apply_visual_theme.py         # 注入深色视觉层（可重复执行）
-│   ├── verify_handbook.py            # 端到端验证
+│   ├── verify_handbook.py            # 端到端验证（功能层）
+│   ├── audit_content.py              # 内容层审计（数字无出处 / claim 覆盖）
 │   └── package_delivery.py           # 打包
 └── references/
     ├── workflow.md                   # 八阶段操作细节
@@ -209,3 +212,5 @@ zhishu/
 21. **分期写入的章节文件尾部会多一个 `"""`**：单次 Write 截断后内容不完整，追加时又补了一个三引号，文件末尾剩两个。症状是 `ast.parse` 报 `unterminated triple-quoted string literal`，构建脚本直接退出。每次追加完先跑一遍 `python3 -c "import ast;ast.parse(open(p).read())"` 再构建。
 22. **重编号会打断正文引用**：把章节号从 12–18 改成 11–17 时，标题里的 `<span class="num">`、正文的"第 N 章"、小节号 `N.M`、公式号 `\tag{N.M}`、括注引用 `(N.M)` 都要一起改。用一次性映射函数替换，不要在循环里反复 replace，否则 12→11 之后又被 13→12 覆盖。改完抽查三处：标题编号连续、`第 N 章` 没有指回旧号、公式引用与实际 `\tag` 对齐。
 23. **视觉层注入顺序错了会白做**：`build_handbook.py` 重建会覆盖 `index.html`，`apply_visual_theme.py` 必须在构建之后、验证和打包之前跑。先打包再注入，zip 里仍是旧皮肤。旧页面用 JS 设置 `#progress-bar > div` 的 `width`，主题只改背景色，不要改成 `transform`，否则进度条一直满格。
+24. **`[[cl01]]` 只在正文替换，代码块里不换**：`_apply_claims` 按 `<pre>...</pre>` 切段后逐段替换，避免把示例代码里的 `[[...]]` 也变成角标。改这个正则时注意 `[\s\S]` 不要多转义一层写成 `[\\s\\S]`，否则匹配不到任何 `<pre>`，整页都被替换。
+25. **多书总入口的 claim id 必须前缀化**：`build_handbook.py` 从各书伴侣 HTML 里抽 `rendered`，里面的 `data-cite="cl01"` 是单书局部 id，不前缀化就会两本书的 `cl01` 撞在一起，点 B 书的角标弹出 A 书的原句。`normalize_book` 里 href 前缀化之后紧跟着就是 data-cite 前缀化，`SOURCES` 键同格式。

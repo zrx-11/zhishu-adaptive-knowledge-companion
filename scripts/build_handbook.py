@@ -247,6 +247,7 @@ def normalize_book(key, data):
 
     # ① 内部链接 #/xxx => #/book/<key>/xxx
     rendered = {pid: re.sub(r'href="#/', f'href="#/book/{key}/', h) for pid, h in rendered.items()}
+    rendered = {pid: re.sub(r'data-cite="([^"]+)"', lambda m: f'data-cite="{key}:{m.group(1)}"', h) for pid, h in rendered.items()}
 
     # ①b Mermaid 标签内的 " | " 与半角括号会破坏语法 → 修正
     rendered = {pid: re.sub(
@@ -476,6 +477,17 @@ def main():
     html = html.replace("__TABS__", dump(tabs))
     html = html.replace("__FIRST_DOC__", dump(cross_meta[0]["key"]))
     html = html.replace("__SYN_GROUPS__", dump(_load_synonyms(*[b["path"] for b in books])))
+    sources = {}
+    for b in books:
+        for i, c in enumerate(b["manifest"].get("claims") or [], 1):
+            if not isinstance(c, dict):
+                continue
+            cid = str(c.get("id") or "").strip()
+            if not cid:
+                continue
+            sources[f'{b["key"]}:{cid}'] = {"n": i, "page": c.get("page", ""),
+                                            "quote": c.get("quote", ""), "zh": c.get("zh", "")}
+    html = html.replace("__SOURCES__", dump(sources))
 
     out_path = args.out or os.path.join(root, "index.html")
     with open(out_path, "w", encoding="utf-8") as f:
@@ -604,6 +616,14 @@ svg{max-width:100%;height:auto}
 .search-group{margin:18px 0}
 .grp-head{font-size:13px;font-weight:600;color:var(--muted);border-bottom:1px solid var(--border);padding-bottom:5px;margin-bottom:4px}
 .grp-count{margin-left:6px;font-weight:400;opacity:.75}
+sup.cite{display:inline-block;min-width:14px;padding:0 3px;margin:0 1px;border-radius:3px;background:var(--accent-soft);color:var(--accent);font-size:11px;line-height:16px;text-align:center;cursor:pointer;vertical-align:super;font-weight:600}
+sup.cite:hover{filter:brightness(.95)}
+.cite-pop{position:fixed;right:18px;bottom:18px;max-width:380px;max-height:60vh;overflow:auto;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px 14px;box-shadow:0 8px 28px rgba(0,0,0,.18);z-index:60;font-size:14px}
+.cite-head{font-size:12px;color:var(--muted);display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.cite-x{border:0;background:none;color:var(--muted);font-size:18px;line-height:1;cursor:pointer;padding:0 4px}
+.cite-pop blockquote{margin:0 0 8px;padding-left:10px;border-left:3px solid var(--border);color:var(--text);font-size:13px}
+.cite-zh{color:var(--muted);font-size:13px}
+@media (max-width:640px){.cite-pop{left:12px;right:12px;bottom:12px;max-width:none}}
 .syn-note{display:inline-block;margin-left:8px;padding:1px 6px;border-radius:4px;background:var(--accent-soft);color:var(--muted);font-size:12px;vertical-align:middle}
 .search-hit mark,.hl{background:#fde68a;color:inherit;padding:0 1px;border-radius:2px}
 .hit-hl{background:#fbbf24;color:inherit;border-radius:3px;box-shadow:0 0 0 2px #fde68a}
@@ -661,6 +681,7 @@ const BOOKS = __BOOKS__;
 const META = __META__;
 const CROSS = __CROSS__;
 const SYN_GROUPS = __SYN_GROUPS__;
+const SOURCES = __SOURCES__;
 const CROSS_META = __CROSS_META__;
 const TABS = __TABS__;
 const FIRST_DOC = __FIRST_DOC__;
@@ -676,7 +697,7 @@ function stKey(book,k){ return 'hb:'+book+':'+k; }
 function getState(book){
   return { visited: store.get(stKey(book,'visited'))||[], quiz: store.get(stKey(book,'quiz'))||{}, cards: store.get(stKey(book,'cards'))||{} };
 }
-const ZS_VERSION = '1.6.1';
+const ZS_VERSION = '1.7.0';
 /* ---------- 进度导出 / 导入（跨设备） ---------- */
 function exportProgress(){
   const data = {};
@@ -1363,6 +1384,29 @@ function doRenderMath(){
   });
 }
 route();
+
+/* ---------- 句级出处：点击角标弹出原句 ---------- */
+let citePop = null;
+function closeCite(){ if(citePop){ citePop.remove(); citePop = null; } }
+function showCite(id){
+  const c = (typeof SOURCES !== 'undefined') ? SOURCES[id] : null;
+  if(!c) return;
+  closeCite();
+  citePop = document.createElement('div');
+  citePop.className = 'cite-pop';
+  citePop.innerHTML = '<div class="cite-head">出处' + (c.page!=='' && c.page!=null ? (' · p.'+esc(String(c.page))) : '') +
+    '<button class="cite-x" aria-label="关闭">×</button></div>' +
+    (c.quote ? '<blockquote>'+esc(c.quote)+'</blockquote>' : '') +
+    (c.zh ? '<div class="cite-zh">'+esc(c.zh)+'</div>' : '');
+  document.body.appendChild(citePop);
+  citePop.querySelector('.cite-x').onclick = closeCite;
+}
+document.addEventListener('click', e=>{
+  const t = e.target.closest('.cite');
+  if(t){ e.preventDefault(); showCite(t.dataset.cite); return; }
+  if(citePop && !e.target.closest('.cite-pop')) closeCite();
+});
+document.addEventListener('keydown', e=>{ if(e.key === 'Escape') closeCite(); });
 </script>
 </body>
 </html>

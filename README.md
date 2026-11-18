@@ -2,7 +2,7 @@
 
 把学习材料变成"按依赖带你走、答错倒推根因、难点从零推透"的单文件交互学习网页。材料可以是一个知识点、一组题、一份课件、一本书，也可以是多本书。
 
-**当前版本 v1.6.1**（更新记录见 [CHANGELOG.md](CHANGELOG.md)）
+**当前版本 v1.7.0**（更新记录见 [CHANGELOG.md](CHANGELOG.md)）
 
 ## 特性
 
@@ -30,7 +30,15 @@
 - 单书 Pages 形态（书目录里只有 `index.html`）也能被 `build_handbook.py` 识别为伴侣
 - 版本号写入页面（`ZS_VERSION`），误解卡在单书与总入口都可用
 - 进度导出/导入（JSON），单书与多书总入口前缀隔离，换设备可搬
-- `verify_handbook.py` 32 项浏览器回归，真实 chromium 跑，不是静态检查
+- `verify_handbook.py` 37 项浏览器回归，真实 chromium 跑，不是静态检查；`audit_content.py` 另做内容层校验
+
+**句级出处与内容审计（v1.7.0，价值提取自 [ai-azhou/pdf-to-interactive-web](https://github.com/ai-azhou/pdf-to-interactive-web)，MIT）**
+
+- manifest 加 `claims[]`（`{id, page, quote, zh}`），正文写 `[[cl01]]`，构建后成为可点角标
+- 点角标弹出页码、原文逐字句、中文转述；总入口按书前缀化 id，跨书不撞号
+- `scripts/audit_content.py`：报"带数字但没有出处"的句子、未被引用的 claim、引用了未定义的 claim、外链数量；跳过标题序号，不把「1.1 第 1 节」误报
+- `references/pedagogy.md` §14 收录 9 类转述错误清单与五类标注约定（原文/推算/示意/读图/解读）
+- 未采用上游的 2500 字硬上限与 7 场景线性结构：知枢要"学完"，不是一个 PDF 一节做一页
 
 **视觉（v1.6.0 起）**
 
@@ -75,7 +83,7 @@ python3 scripts/verify_handbook.py --index <root>/index.html \
 
 ```
 ├── SKILL.md                 # 技能主文档：六层架构、五种输入形态、八阶段流程、23 条踩坑
-├── CHANGELOG.md             # 1.6.1 / 1.6.0 / 1.5.0 / 1.4.1 / 1.4.0 / 1.3.0 / 1.2.0 / 1.1.0 / 1.0.0
+├── CHANGELOG.md             # 1.7.0 / 1.6.4 … 1.0.0
 ├── README.md
 ├── assets/
 │   └── visual-theme.css     # 深色视觉层

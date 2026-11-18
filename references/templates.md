@@ -259,6 +259,9 @@ name: <书名-或-主题>（点化学习总纲）
   ],
   "flashcards": [
     {"id": "f01", "chapterId": "ch01", "front": "问题", "back": "答案", "tags": ["tag"]}
+  ],
+  "claims": [
+    {"id": "cl01", "page": 45, "quote": "原文逐字摘句", "zh": "中文转述"}
   ]
 }
 ```
@@ -274,6 +277,7 @@ name: <书名-或-主题>（点化学习总纲）
 | `concepts[].externalTaxonomyId` | 字符串 | 可选，对应 cn-math-taxonomy 等外部课标图谱的节点 id |
 | `quizzes[].relatedConceptId` | 概念 id | 答错时关联的根因概念，诊断倒推的起点 |
 | `quizzes[].optionMisconceptions` | 数组 | 每个选项对应的误解 id（single 类型），选错时弹出误解卡片 |
+| `claims[]` | `{id, page, quote, zh}` | 句级出处账本。正文用 `[[cl01]]` 标注，构建后成为可点角标，点击弹出页码、原句、转述 |
 
 ### 知枢新增：依赖分级与误解
 
@@ -297,6 +301,15 @@ name: <书名-或-主题>（点化学习总纲）
 - `misconceptions` 是全局列表，测验选项通过 `optionMisconceptions` 引用
 
 字段约束：`chapterIds`/`chapterId` 必须与 `chapters[].id` 一致；`quizzes[].answer` 类型与 `type` 匹配；`quizzes[].explain` 必填；`prerequisites` 不得形成环；`depthFragment` 文件存在时才会被渲染。
+
+句级出处写法（v1.5.0）：
+
+1. `claims[].id` 全书唯一，建议 `cl` + 两位序号；`page` 是原文页码，没有页码就给 `null`。
+2. 正文写 `[[cl01]]`，可连写 `[[cl01]][[cl02]]`；构建时替换为 `<sup class="cite">`，`<pre>` 代码块内不替换。
+3. 只挂事实性句子（定义、定理条件、数字、日期、归属），自己的解释与比喻不挂。
+4. `quote` 与 `zh` 分开写：一个是原文逐字句，一个是你的转述，方便逐条比对 `pedagogy.md` §14 的 9 类错误。
+5. 总入口（build_handbook.py）会自动把各书 claim 的 id 前缀化为 `<书 key>:clXX`，跨书不会撞号。
+6. 写完后跑 `python3 scripts/audit_content.py <书>/xxx.html`：报数字无出处、claim 未被引用、引用了未定义的 claim。
 
 ## 11. 跨书总览（`00-跨书总览/README.md`）
 

@@ -87,6 +87,41 @@ def _is_raw_open(line):
     return m and m.group(1).lower() in ALLOWED_RAW_TAGS
 
 
+_CLAIMS = {}
+
+
+def _build_claims(manifest):
+    """manifest.claims[] → {id: {n, page, quote, zh}}，n 是页面上角标的序号。"""
+    idx = {}
+    for i, c in enumerate(manifest.get("claims") or [], 1):
+        if not isinstance(c, dict):
+            continue
+        cid = str(c.get("id") or "").strip()
+        if not cid or cid in idx:
+            continue
+        idx[cid] = {"n": i, "page": c.get("page", ""), "quote": c.get("quote", ""), "zh": c.get("zh", "")}
+    return idx
+
+
+def _apply_claims(html, claims):
+    """把正文里的 [[cl01]] 换成 <sup class="cite">，代码块内不处理。"""
+    if not claims or "[[cl" not in html:
+        return html
+    blocks = re.split(r"(<pre[\s\S]*?</pre>)", html)
+    def repl(m):
+        c = claims.get(m.group(1))
+        if not c:
+            return m.group(0)
+        page = c.get("page")
+        tt = f' title="出处 p.{_escape(str(page))}"' if page not in (None, "") else ""
+        return f'<sup class="cite" data-cite="{_escape(m.group(1))}"{tt}>{c["n"]}</sup>'
+    for i, seg in enumerate(blocks):
+        if seg.startswith("<pre"):
+            continue
+        blocks[i] = re.sub(r"\[\[([A-Za-z0-9_\-]+)\]\]", repl, seg)
+    return "".join(blocks)
+
+
 def md_to_html(md_text):
     """把 Markdown 文本渲染为 HTML。输出已转义 + 安全透传。"""
     lines = md_text.replace("\r\n", "\n").split("\n")
@@ -228,7 +263,7 @@ def md_to_html(md_text):
             while j < n and lines[j].strip().startswith("|"):
                 rows.append(_split_table_row(lines[j]))
                 j += 1
-            tbl = ["<table><thead><tr>"]
+            tbl = ["<div class=\"table-wrap\"><table><thead><tr>"]
             for c in header:
                 tbl.append(f"<th>{_inline(_escape(c))}</th>")
             tbl.append("</tr></thead><tbody>")
@@ -237,7 +272,7 @@ def md_to_html(md_text):
                 for c in r:
                     tbl.append(f"<td>{_inline(_escape(c))}</td>")
                 tbl.append("</tr>")
-            tbl.append("</tbody></table>")
+            tbl.append("</tbody></table></div>")
             out.append("".join(tbl))
             i = j
             continue
@@ -271,7 +306,7 @@ def md_to_html(md_text):
 
     flush_para(para)
     close_lists()
-    return "\n".join(out)
+    return _apply_claims("\n".join(out), _CLAIMS)
 
 
 # ----------------------------------------------------------------------------
@@ -476,6 +511,7 @@ def build_html(data):
     html_str = html_str.replace("__SUBTITLE__", _escape(manifest.get("subtitle", "")))
     html_str = html_str.replace("__DATA_JSON__", payload)
     html_str = html_str.replace("__SYN_GROUPS__", json.dumps(_load_synonyms(data.get("base_dir")), ensure_ascii=False).replace("</", "<\\/"))
+    html_str = html_str.replace("__SOURCES__", json.dumps(_CLAIMS, ensure_ascii=False).replace("</", "<\\/"))
     return html_str
 
 
@@ -610,6 +646,7 @@ a:hover{text-decoration:underline}
 .page h1{font-size:26px;border-bottom:2px solid var(--border);padding-bottom:8px;margin-top:0}
 .page h2{font-size:20px;margin-top:26px}
 .page h3{font-size:17px;margin-top:22px}
+.table-wrap{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}
 .page table{border-collapse:collapse;width:100%;margin:12px 0;font-size:14px}
 .page th,.page td{border:1px solid var(--border);padding:6px 10px;text-align:left}
 .page th{background:var(--code-bg)}
@@ -683,6 +720,14 @@ svg{max-width:100%;height:auto}
 .search-group{margin:18px 0}
 .grp-head{font-size:13px;font-weight:600;color:var(--muted);border-bottom:1px solid var(--border);padding-bottom:5px;margin-bottom:4px}
 .grp-count{margin-left:6px;font-weight:400;opacity:.75}
+sup.cite{display:inline-block;min-width:14px;padding:0 3px;margin:0 1px;border-radius:3px;background:var(--accent-soft);color:var(--accent);font-size:11px;line-height:16px;text-align:center;cursor:pointer;vertical-align:super;font-weight:600}
+sup.cite:hover{filter:brightness(.95)}
+.cite-pop{position:fixed;right:18px;bottom:18px;max-width:380px;max-height:60vh;overflow:auto;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px 14px;box-shadow:0 8px 28px rgba(0,0,0,.18);z-index:60;font-size:14px}
+.cite-head{font-size:12px;color:var(--muted);display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.cite-x{border:0;background:none;color:var(--muted);font-size:18px;line-height:1;cursor:pointer;padding:0 4px}
+.cite-pop blockquote{margin:0 0 8px;padding-left:10px;border-left:3px solid var(--border);color:var(--text);font-size:13px}
+.cite-zh{color:var(--muted);font-size:13px}
+@media (max-width:640px){.cite-pop{left:12px;right:12px;bottom:12px;max-width:none}}
 .syn-note{display:inline-block;margin-left:8px;padding:1px 6px;border-radius:4px;background:var(--accent-soft);color:var(--muted);font-size:12px;vertical-align:middle}
 .search-hit mark,.hl{background:#fde68a;color:inherit;padding:0 1px;border-radius:2px}
 .hit-hl{background:#fbbf24;color:inherit;border-radius:3px;box-shadow:0 0 0 2px #fde68a}
@@ -714,7 +759,7 @@ svg{max-width:100%;height:auto}
   .card-actions button{min-height:40px}
   #nav-toggle{display:block;width:100%;padding:8px 10px;margin:4px 0;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;text-align:left;cursor:pointer}
   .layout{flex-direction:column}.main{padding:20px 18px 64px;max-width:none;width:100%}
-  .page{overflow-wrap:anywhere}.page table{display:block;overflow-x:auto;max-width:100%}
+  .page{overflow-wrap:anywhere}.table-wrap{overflow-x:auto;max-width:100%}.page table{display:table;width:max-content;min-width:100%;max-width:none}
   .page h1,.page h2,.page h3{line-height:1.35}}
 </style>
 </head>
@@ -738,6 +783,7 @@ const DATA = __DATA_JSON__;
 const pages = DATA.rendered;
 const manifest = DATA.manifest;
 const SYN_GROUPS = __SYN_GROUPS__;
+const SOURCES = __SOURCES__;
 const $ = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -746,7 +792,7 @@ const store = {
   get(k){ try{ return JSON.parse(localStorage.getItem(SLUG+':'+k)||'null') }catch(e){ return null } },
   set(k,v){ try{ localStorage.setItem(SLUG+':'+k, JSON.stringify(v)) }catch(e){} }
 };
-const ZS_VERSION = '1.6.1';
+const ZS_VERSION = '1.7.0';
 /* ---------- 进度导出 / 导入（跨设备） ---------- */
 function exportProgress(){
   const data = {};
@@ -1520,6 +1566,29 @@ window.addEventListener('hashchange', ()=>showPage(routeIdFromHash()));
   window.addEventListener('hashchange',()=>{ if(window.innerWidth<=760) sb.classList.remove('open'); });
 })();
 showPage(routeIdFromHash());
+
+/* ---------- 句级出处：点击角标弹出原句 ---------- */
+let citePop = null;
+function closeCite(){ if(citePop){ citePop.remove(); citePop = null; } }
+function showCite(id){
+  const c = (typeof SOURCES !== 'undefined') ? SOURCES[id] : null;
+  if(!c) return;
+  closeCite();
+  citePop = document.createElement('div');
+  citePop.className = 'cite-pop';
+  citePop.innerHTML = '<div class="cite-head">出处' + (c.page!=='' && c.page!=null ? (' · p.'+esc(String(c.page))) : '') +
+    '<button class="cite-x" aria-label="关闭">×</button></div>' +
+    (c.quote ? '<blockquote>'+esc(c.quote)+'</blockquote>' : '') +
+    (c.zh ? '<div class="cite-zh">'+esc(c.zh)+'</div>' : '');
+  document.body.appendChild(citePop);
+  citePop.querySelector('.cite-x').onclick = closeCite;
+}
+document.addEventListener('click', e=>{
+  const t = e.target.closest('.cite');
+  if(t){ e.preventDefault(); showCite(t.dataset.cite); return; }
+  if(citePop && !e.target.closest('.cite-pop')) closeCite();
+});
+document.addEventListener('keydown', e=>{ if(e.key === 'Escape') closeCite(); });
 </script>
 </body>
 </html>
@@ -1539,6 +1608,9 @@ def main():
     mdir = os.path.dirname(os.path.abspath(args.manifest))
     with open(args.manifest, "r", encoding="utf-8") as f:
         manifest = json.load(f)
+
+    global _CLAIMS
+    _CLAIMS = _build_claims(manifest)
 
     base = mdir
     pages = {}

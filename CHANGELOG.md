@@ -3,6 +3,39 @@
 改动规则：动 `SKILL.md`、`references/`、`scripts/` 任一处，都在这里加一条，并把 `SKILL.md` frontmatter 的 `version` 同步。
 生成物里 `ZS_VERSION` 常量会写进页面，用于判断某个 HTML 是哪一版产出的。
 
+## 1.7.0 — 2026-11-19
+
+**句级出处 + 内容层审计**（价值提取自 `ai-azhou/pdf-to-interactive-web`，MIT）
+
+1. manifest 新增 `claims[]`（`{id, page, quote, zh}`）。正文写 `[[cl01]]`，构建时替换为 `<sup class="cite" data-cite="cl01" title="出处 p.45">1</sup>`；`<pre>` 代码块内不替换。
+2. 角标点击弹出固定卡片：页码、原文原句（blockquote）、中文转述；× / ESC / 点空白关闭；≤640px 铺满左右。单书与总入口同款实现。
+3. `build_handbook.py` 的 `normalize_book` 给 `data-cite` 加书前缀（`zs-test:cl01`），`SOURCES` 键同格式，跨书不撞号。
+4. 新增 `scripts/audit_content.py`（纯标准库）：读构建产物里的 `DATA`，报"带数字但没角标"的句子、未被引用的 claim、引用了未定义的 claim、外链数量。跳过标题与出处徽标，避免把「1.1 第 1 节」当数字句。
+5. `references/pedagogy.md` §14 新增 9 类转述错误清单（单位错位 / 主客体颠倒 / 丢条件 / 以偏概全 / 顺序说反 / 细节过头 / 计数读图 / 概念混用 / 评论冒充原文）与五类标注约定（原文/推算/示意/读图/解读）。
+6. `references/templates.md` §10 补 `claims[]` 字段说明与 6 条写法约定。
+7. `verify_handbook.py` 从 32 项扩到 37 项：角标渲染、id 带书前缀、点击弹卡、弹窗含原文原句、ESC 关闭。
+8. 版本号 1.6.4 → 1.7.0。
+
+
+## 1.6.4 — 2026-11-18
+
+1. `build_companion.py` 把 Markdown 表格统一包进 `.table-wrap`，不再让 `<thead>/<tbody>` 的宽度直接参与文档滚动宽度。
+2. 视觉层给 `.table-wrap` 加 `overflow-x:auto` + `contain:paint`；390px 下 101 行索引表不再把整页撑到 798/1057px，改为表格容器内滑动。
+3. 900px 以上恢复 `display:table; width:100%; table-layout:fixed`，桌面端单元格换行，不出现页面级横向滚动。
+4. 8 本单书伴侣与总入口实测 `scrollWidth=390`；全球分册 16 章逐页通过。
+
+## 1.6.3 — 2026-11-18
+
+1. 视觉层给宽表加 `display:block; max-width:100%; overflow-x:auto;`，单元格 `white-space:nowrap`；390px 下 7 列表格不再被压成一字宽，改为容器内横向滚动。
+2. 全球分册第 16 章 101 行索引、Qwen/Mistral 配置表和 Gemma 对照表实测：页面 `scrollWidth=390`，表格自身可横向滚动。
+3. 版本号升到 1.6.3。
+
+## 1.6.2 — 2026-11-18
+
+1. `verify_handbook.py` 的主题断言改为记录切换前后状态：默认深色时不把“深色→浅色”误判为失败，报告字段改为 `dark → light`。
+2. 同义召回断言增加精确命中分支：选中的同义词本身在全书里有精确结果时，不再因为没有 `.syn-note` 错误失败；只有“零结果”才判失败。
+3. 8 本书总入口实测 73/73 通过（1440/390，Playwright）。
+
 ## 1.6.1 — 2026-11-18
 
 1. `visual-theme.css` 补齐旧版单页的 `.hero` / `.header` / `.page-header` 深色覆盖，避免蓝色渐变页头和深色正文割裂。

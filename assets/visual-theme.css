@@ -274,6 +274,56 @@ textarea::placeholder,
 table {
   border-color: var(--border) !important;
   color: var(--text) !important;
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+}
+
+.page th,
+.page td,
+th,
+td {
+  white-space: nowrap;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+  contain: paint;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-wrap table {
+  display: table;
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+  overflow: visible;
+  white-space: normal;
+  table-layout: auto;
+}
+
+@media (min-width: 900px) {
+  .page table,
+  table {
+    display: table;
+    width: 100%;
+    overflow: visible;
+    white-space: normal;
+    table-layout: fixed;
+  }
+  .page th,
+  .page td,
+  th,
+  td {
+    white-space: normal;
+  }
+  .table-wrap table {
+    width: 100%;
+    table-layout: fixed;
+  }
 }
 
 .page th,
