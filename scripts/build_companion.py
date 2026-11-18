@@ -793,7 +793,7 @@ const store = {
   get(k){ try{ return JSON.parse(localStorage.getItem(SLUG+':'+k)||'null') }catch(e){ return null } },
   set(k,v){ try{ localStorage.setItem(SLUG+':'+k, JSON.stringify(v)) }catch(e){} }
 };
-const ZS_VERSION = '1.8.0';
+const ZS_VERSION = '1.9.0';
 /* ---------- 进度导出 / 导入（跨设备） ---------- */
 function exportProgress(){
   const data = {};
@@ -895,6 +895,7 @@ let katexLoading = false, katexReady = false;
 function renderMath(){
   const hasMath = document.querySelector('.katex-inline, .katex-block');
   if(!hasMath) return;
+  if(typeof ZHISHU_OFFLINE !== 'undefined' && ZHISHU_OFFLINE && typeof katex === 'undefined') return;
   if(typeof katex !== 'undefined'){ doRenderMath(); return; }
   if(katexReady){ doRenderMath(); return; }
   if(katexLoading) return;
@@ -1073,6 +1074,7 @@ let networkLoaded = false;
 function loadVisNetwork(cb){
   if(networkLoaded){ cb(); return; }
   if(typeof vis !== 'undefined'){ networkLoaded = true; cb(); return; }
+  if(typeof ZHISHU_OFFLINE !== 'undefined' && ZHISHU_OFFLINE) { cb(); return; }
   const urls = [
     'https://cdn.jsdelivr.net/npm/vis-network@9.1.9/dist/vis-network.min.js',
     'https://unpkg.com/vis-network@9.1.9/dist/vis-network.min.js',
@@ -1094,7 +1096,7 @@ function initGraph(){
   const container = document.getElementById('graph-container');
   if(!container) return;
   loadVisNetwork(() => {
-    if(typeof vis === 'undefined'){ container.innerHTML = '<p class="empty">图谱库加载失败，请联网后刷新</p>'; return; }
+    if(typeof vis === 'undefined'){ container.innerHTML = '<p class="empty">图谱库未加载：离线构建请加 <code>--offline all</code>，或联网后刷新</p>'; return; }
     const concepts = manifest.concepts || [];
     const chapters = manifest.chapters || [];
     const nodes = [];
@@ -1518,6 +1520,7 @@ $('#q').addEventListener('input', e=>{
 /* ---------- Mermaid 懒加载 ---------- */
 function renderMermaid(){
   if(!document.querySelector('.mermaid')) return;
+  if(typeof ZHISHU_OFFLINE !== 'undefined' && ZHISHU_OFFLINE && typeof mermaid === 'undefined') return;
   const boot=()=>{ try{
     mermaid.initialize({startOnLoad:false, theme: matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});
     document.querySelectorAll('.mermaid').forEach(el=>{
@@ -1607,8 +1610,8 @@ def main():
     ap = argparse.ArgumentParser(description="zhishu 知枢：组装单文件 HTML 学习伴侣")
     ap.add_argument("--manifest", required=True, help="manifest.json 路径")
     ap.add_argument("--out", required=True, help="输出 HTML 路径")
-    ap.add_argument("--offline", choices=["none", "katex", "all"], default="none",
-                    help="katex=内联 KaTeX+Pico；all=再加 vis-network（需先跑 fetch_vendor.py）")
+    ap.add_argument("--offline", choices=["none", "katex", "graph", "all", "auto"], default="none",
+                    help="katex=公式+Pico；graph=图谱+Pico；all=两者；auto=按内容自动判定")
     ap.add_argument("--offline-mermaid", action="store_true", help="把所有库都内联（需 fetch_vendor.py --mermaid）")
     args = ap.parse_args()
 
@@ -1639,18 +1642,26 @@ def main():
     data = {"manifest": manifest, "pages": pages, "base_dir": base}
     html_out = build_html(data)
 
-    if args.offline in ("katex", "all"):
-        parts = [vendor_assets.katex_css(), vendor_assets.pico_css(), vendor_assets.katex_js()]
-        if args.offline == "all":
-            parts.append(vendor_assets.vis_js())
-        if args.offline_mermaid:
-            parts.append(vendor_assets.mermaid_js())
-        blob = "\n".join(x for x in parts if x)
+    mode = args.offline
+    if mode == "auto":
+        has_math = any("katex-" in ((pg or {}).get("html") or "") for pg in pages.values())
+        has_graph = "__graph__" in html_out and len(manifest.get("concepts") or []) >= 2
+        mode = "all" if (has_math and has_graph) else ("katex" if has_math else ("graph" if has_graph else "none"))
+        print(f"自动内联判定：公式 {'有' if has_math else '无'} · 图谱 {'有' if has_graph else '无'} → {mode}")
+
+    if args.offline != "none":
+        html_out = html_out.replace('<html lang="zh-CN"', f'<html lang="zh-CN" data-offline="{mode}"', 1)
+    want_katex = mode in ("katex", "all")
+    want_graph = mode in ("graph", "all")
+    if want_katex or want_graph:
+        blob = vendor_assets.bundle(katex=want_katex, pico=True, vis=want_graph, mermaid=args.offline_mermaid)
         if not blob.strip():
             print("警告：assets/vendor 为空，先跑 python3 scripts/fetch_vendor.py", file=sys.stderr)
         else:
             html_out = vendor_assets.strip_cdn_links(html_out)
             html_out = html_out.replace("</head>", blob + "\n</head>", 1)
+    if args.offline != "none":
+        html_out = html_out.replace("<head>", "<head>\n<script>const ZHISHU_OFFLINE = true;</script>", 1)
 
     os.makedirs(os.path.dirname(os.path.abspath(args.out)) or ".", exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as f:
@@ -1661,8 +1672,8 @@ def main():
     print(f"  章节 {len(manifest.get('chapters', []))} · 概念 {len(manifest.get('concepts', []))} · "
           f"测验 {len(manifest.get('quizzes', []))} · 抽认卡 {len(manifest.get('flashcards', []))} · "
           f"术语 {len(manifest.get('glossary', []))}")
-    if args.offline in ("katex", "all"):
-        print(f"  文件大小 {kb/1024:.1f} KB（离线内联：KaTeX 公式与图谱不走 CDN）")
+    if want_katex or want_graph:
+        print(f"  文件大小 {kb/1024:.1f} KB（离线内联：{('公式 ' if want_katex else '') + ('图谱 ' if want_graph else '')}不走 CDN）")
     else:
         print(f"  文件大小 {kb/1024:.1f} KB（单文件，可离线打开；公式需联网加载 KaTeX）")
     return 0

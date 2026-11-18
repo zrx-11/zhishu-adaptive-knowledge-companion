@@ -3,6 +3,22 @@
 改动规则：动 `SKILL.md`、`references/`、`scripts/` 任一处，都在这里加一条，并把 `SKILL.md` frontmatter 的 `version` 同步。
 生成物里 `ZS_VERSION` 常量会写进页面，用于判断某个 HTML 是哪一版产出的。
 
+## 1.9.0 — 2026-11-19
+
+**离线按需内联 + 旧书自愈 + 审计降噪**
+
+1. 两个构建器加 `--offline auto`：构建完先数内容里的公式（页面 HTML 中的 `katex-inline`/`katex-block`）和图谱（概念数 ≥ 2 且存在图谱页），再折算成 `none | katex | graph | all` 四档，打印「自动内联判定：公式 有/无 · 图谱 有/无 → 档位」。`graph` 档只内联 Pico + vis-network，不塞 1.2MB 的 KaTeX。
+2. 产物 `<html>` 上写 `data-offline="<档位>"`，导出的静态文件自己能说清是哪一档构建的。
+3. 新增全局离线标志 `ZHISHU_OFFLINE`（只在 `--offline != none` 时注入）：页面里 KaTeX / vis-network / Mermaid 三个加载器先看标志，库没内联就直接不联网。此前 `--offline all` 打开一个含 Mermaid 的书页仍会去请求 jsdelivr/npmmirror/unpkg，`verify --expect-offline` 直接红。
+4. 图谱库缺失文案改为「图谱库未加载：离线构建请加 `--offline all`，或联网后刷新」，不再误导成「加载失败」。
+5. 修 `build_handbook.py` 内联 Mermaid 时的 `boot is not defined`（1.8.0 遗留）：函数名是 `run`，写成 `boot()` 会在 `try` 外抛 ReferenceError。
+6. 总入口旧书自愈：单书 HTML 若是 1.6.x 之前生成、DATA 里没有 `__diagnosis__`，`build_handbook.py` 用同一份 `_render_diagnosis_page()` 补建该页（存成页面字符串，与其它页面一致）。7 本常微分方程实测：`诊断页可打开` 由 FAIL 转 PASS。
+7. `audit_content.py` 不再把章节头部的「难度 / 学时 / 前置」装配行当内容主张：含 `难度</strong>` 或 `学时</strong>` 的块整块跳过。CPU 通识课（8.3 万汉字）噪声 322 → 284 处，剩下全是真实数字事实句（1945 年 EDVAC、17468 个电子管、2250 个晶体管、1971 年 Intel 4004）。
+8. `audit_content.py` 的 `text_of` 改用 `html.unescape`，输出里的 `&quot;` 不再原样外露。
+9. 实测（`--offline auto`，全部成功）：三档 fixture 1449.1KB（公式+图谱）/ 821.0KB（只有图谱）/ 65.1KB（都没有）。本机 104 本真书：`all` 17 本（中位 1908KB）、`graph` 74 本（946KB）、`katex` 3 本（878KB）、`none` 10 本（124KB）。
+10. 真实回归：7 本常微分方程总入口 `verify --expect-offline` 65/66（同条件下不带 offline 的基线是 63/65）；4 本算法专项 51/52。剩余唯一失败项都是「出处脚注 0 处」——这批旧书 manifest 里没有任何 `source` 字段，属于数据缺失，不是构建缺陷。
+11. 版本 1.8.0 → 1.9.0。
+
 ## 1.8.0 — 2026-11-19
 
 **离线内联：断网也能渲染公式与图谱**

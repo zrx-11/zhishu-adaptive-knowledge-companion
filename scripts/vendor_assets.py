@@ -78,3 +78,18 @@ CDN_LINK_RE = re.compile(
 def strip_cdn_links(html):
     """离线构建时把 CDN 的 katex/pico/vis 样式表链接删掉（内容已内联）。"""
     return CDN_LINK_RE.sub("", html)
+
+
+def bundle(katex=False, pico=False, vis=False, mermaid=False):
+    """按需组合内联片段。返回空串表示什么也没内联。"""
+    parts = []
+    if pico:
+        parts.append(pico_css())
+    if katex:
+        parts.append(katex_css())
+        parts.append(katex_js())
+    if vis:
+        parts.append(vis_js())
+    if mermaid:
+        parts.append(mermaid_js())
+    return "\n".join(x for x in parts if x)

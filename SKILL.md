@@ -1,7 +1,7 @@
 ---
 name: zhishu
 display_name: 知枢学习系统
-version: 1.8.0
+version: 1.9.0
 description: 把任何学习材料——一个知识点、一组题、一份课件、一本书、多本书——变成"按依赖带你走、答错倒推根因、难点从零推透"的单文件交互学习网页。自动识别输入形态并选最轻的流水线：知识点走第一性原理推导、题目走诊断、课件走单章、书走整书成课、多书走整合入口。适用于"讲一下这个概念""把这堆题做成诊断卡""把这份课件做成能学的页""把这本书吃透""把几本书整合成一门课"。
 ---
 
@@ -102,7 +102,7 @@ python3 scripts/build_companion.py --manifest <书目录>/manifest.json --out <�
 python3 scripts/apply_visual_theme.py --file <书目录>/<slug>学习伴侣.html
 ```
 
-要求"断网也能用"时，在构建命令后加 `--offline katex`（内联 KaTeX+Pico）/ `--offline all`（再加 vis-network 图谱）。前提是先跑过一次 `python3 scripts/fetch_vendor.py`（把库下到 `assets/vendor/`，约 1.4MB）。产物从 68KB 变成约 1.45MB，代价固定，与书的大小无关。
+要求"断网也能用"时，加 `--offline`。三档按需：`auto`（推荐，自己数页面里的公式和图谱，落成 `none|katex|graph|all`）、`katex`（只内联公式+Pico）、`graph`（只内联图谱+Pico）、`all`（两者都内联）。前提是先跑过一次 `python3 scripts/fetch_vendor.py`（把库下到 `assets/vendor/`，约 1.4MB）。实测：含公式+图谱 1449KB、只有图谱 821KB、都没有 65KB。不加 `--offline` 时产物 68KB，行为不变。
 
 **Phase 6 整合总入口**（多书时）：
 
@@ -132,7 +132,7 @@ python3 scripts/apply_visual_theme.py --root <知枢目录>
 11. **可选课标图谱**：数学和理科材料可以接 cn-math-taxonomy，做法见 `references/taxonomy-integration.md`。
 12. **句级出处**：manifest 里的 `claims[]`（`{id, page, quote, zh}`）给每句事实建账，正文写 `[[cl01]]`，构建后变成可点角标，点击弹出页码、原文原句和中文转述。总入口自动按书前缀化 id（`<书 key>:cl01`），跨书不撞号。写法与 9 类转述错误清单见 `references/pedagogy.md` §14。
 13. **内容层审计**：`scripts/audit_content.py` 扫已构建的页面，报"带数字但没有出处"的句子、定义了却没被引用的 claim、引用了但没定义的 claim、外链数量。它和 `verify_handbook.py` 分工：后者验功能（能不能点、有没有报错），前者验内容对不对得起出处。
-14. **离线内联**：`scripts/fetch_vendor.py` 把 KaTeX（含 20 个 woff2 字体，转成 data URI）、Pico、vis-network 下到 `assets/vendor/`；构建时 `--offline katex|all` 把它们塞进 HTML 并删掉 CDN 链接，加载器检测到全局已定义就直接用。产物约 1.45MB，断网时公式与图谱照常渲染。Mermaid 3.3MB，默认仍走 CDN，需要彻底离线再加 `--offline-mermaid`（先 `fetch_vendor.py --mermaid`）。
+14. **离线内联**：`scripts/fetch_vendor.py` 把 KaTeX（含 20 个 woff2 字体，转成 data URI）、Pico、vis-network 下到 `assets/vendor/`；构建时 `--offline auto|katex|graph|all` 把需要的库塞进 HTML 并删掉 CDN 链接。`auto` 会数页面里的 `katex-inline`/`katex-block` 与概念数再定档，产物上写 `data-offline="<档位>"`。Mermaid 3.3MB，默认仍走 CDN，彻底离线再加 `--offline-mermaid`（先 `fetch_vendor.py --mermaid`）。
 
 ## 深度通道触发判据
 
@@ -221,3 +221,7 @@ zhishu/
 24. **`[[cl01]]` 只在正文替换，代码块里不换**：`_apply_claims` 按 `<pre>...</pre>` 切段后逐段替换，避免把示例代码里的 `[[...]]` 也变成角标。改这个正则时注意 `[\s\S]` 不要多转义一层写成 `[\\s\\S]`，否则匹配不到任何 `<pre>`，整页都被替换。
 25. **多书总入口的 claim id 必须前缀化**：`build_handbook.py` 从各书伴侣 HTML 里抽 `rendered`，里面的 `data-cite="cl01"` 是单书局部 id，不前缀化就会两本书的 `cl01` 撞在一起，点 B 书的角标弹出 A 书的原句。`normalize_book` 里 href 前缀化之后紧跟着就是 data-cite 前缀化，`SOURCES` 键同格式。
 26. **内联后字体仍是外链**：KaTeX 的公式排版靠它自己的字体，只内联 `katex.min.js` + `katex.min.css` 而字体仍指向 `fonts/*.woff2`，离线时公式会退回成浏览器默认字体、符号错位。`vendor_assets._inline_fonts` 做两件事：把 20 个 woff2 换成 base64 data URI，同时删掉 woff/ttf 分支（否则引用不存在的文件）。验证方式不是看截图，而是断网后数 `.katex` 节点数。
+27. **`--offline auto` 别扫整页字符串判公式**：CSS 里本来就写着 `.katex-inline{font-size:1.05em}`，`"katex-" in html` 恒为真，"无公式"的书会永远判成有公式。单书直接扫页面数据（`pages[*]["html"]`）；总入口页面内容在 JSON 里被转义，正则要写成 `class=\"katex-`。
+28. **离线了但没内联的库仍会联网**：`--offline all` 只内联 KaTeX 与 vis-network，含 Mermaid 的书页照样去请求 jsdelivr / npmmirror / unpkg，`verify --expect-offline` 一定红。构建器在 `--offline != none` 时注入 `const ZHISHU_OFFLINE = true`，三个加载器见标志且库未定义就直接 return，页面上留一句"离线构建请加 `--offline all`"。
+29. **总入口的诊断页可能是整本缺失**：单书 HTML 生成于诊断页加入之前时，DATA 里没有 `__diagnosis__`，`#/book/x/diagnosis` 只回"页面不存在"。`build_handbook.py` 现在检测缺失就用同一份 `_render_diagnosis_page()` 补建。补建必须存成**字符串**——总入口 `rendered` 的值是 HTML 字符串，塞 `{html: ...}` 会渲染成 `[object Object]`。
+30. **审计会把章节头当事实句**："难度 ★☆☆ | 学时 3 小时 | 前置：…"是构建器生成的装配行。`audit_content.py` 现在整块跳过含 `难度</strong>` / `学时</strong>` 的块；8.3 万字的书噪声从 322 处降到 284 处，剩下都是真实数字句（1945 年 EDVAC、17468 个电子管）。

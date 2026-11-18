@@ -13,6 +13,7 @@ ai-azhou/pdf-to-interactive-web（MIT）的 scripts/audit_html.py，按其 page-
 知枢的 DATA 结构；其余为知枢自有逻辑。
 """
 import argparse
+import html as htmllib
 import json
 import re
 import sys
@@ -40,7 +41,7 @@ def load_pages(path):
 
 
 def text_of(block):
-    return TAG.sub("", block).replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&").strip()
+    return htmllib.unescape(TAG.sub("", block)).strip()
 
 
 def main():
@@ -75,6 +76,9 @@ def main():
             if tag in ("h1", "h2", "h3", "h4"):
                 continue
             if "source-badge" in blk or "prereq" in blk:
+                continue
+            # 章节头部的「难度 / 学时 / 前置」是装配信息，不是内容主张
+            if "难度</strong>" in blk or "学时</strong>" in blk:
                 continue
             t = text_of(block)
             if len(t) < 4 or not NUM.search(t):

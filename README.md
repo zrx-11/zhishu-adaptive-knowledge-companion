@@ -2,7 +2,7 @@
 
 把学习材料变成"按依赖带你走、答错倒推根因、难点从零推透"的单文件交互学习网页。材料可以是一个知识点、一组题、一份课件、一本书，也可以是多本书。
 
-**当前版本 v1.8.0**（更新记录见 [CHANGELOG.md](CHANGELOG.md)）
+**当前版本 v1.9.0**（更新记录见 [CHANGELOG.md](CHANGELOG.md)）
 
 ## 特性
 
@@ -40,10 +40,12 @@
 - `references/pedagogy.md` §14 收录 9 类转述错误清单与五类标注约定（原文/推算/示意/读图/解读）
 - 未采用上游的 2500 字硬上限与 7 场景线性结构：知枢要"学完"，不是一个 PDF 一节做一页
 
-**离线内联（v1.8.0）**
+**离线内联（v1.8.0 起，v1.9.0 加按需判定）**
 
 - `python3 scripts/fetch_vendor.py` 把 KaTeX（含 20 个 woff2 字体）、Pico、vis-network 下到 `assets/vendor/`
-- 构建加 `--offline katex`（公式）或 `--offline all`（公式+图谱），产物约 1.45MB，**断网后公式照常排版、图谱照常拖动**
+- 构建加 `--offline auto`（推荐：自己数页面里的公式与图谱，落成 `none|katex|graph|all`）、`--offline katex`（公式）、`--offline graph`（图谱）、`--offline all`（两者）
+- 实测三档：公式+图谱 1449KB、只有图谱 821KB、都没有 65KB。本机 104 本真书跑 `auto`：`all` 17 本、`graph` 74 本、`katex` 3 本、`none` 10 本
+- 产物 `<html>` 上写 `data-offline="<档位>"`；页内 `ZHISHU_OFFLINE` 标志让没内联的库直接不联网，断网时**公式照常排版、图谱照常拖动**
 - 字体转成 base64 并删掉 woff/ttf 分支，否则离线时公式会退回默认字体、符号错位
 - Mermaid 3.3MB，默认走 CDN；彻底离线加 `--offline-mermaid`
 - `verify_handbook.py --expect-offline` 拦截全部 http 请求，验证"真的一点都不联网"

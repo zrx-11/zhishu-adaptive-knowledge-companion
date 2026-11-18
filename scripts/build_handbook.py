@@ -392,8 +392,8 @@ def main():
     ap.add_argument("--order", default=None, help="只纳入指定前缀/目录名，逗号分隔，如 01,02")
     ap.add_argument("--label", action="append", default=[], help="自定义标签，格式 目录名=标签 或 key=标签")
     ap.add_argument("--no-md", action="store_true", help="不生成 index.md")
-    ap.add_argument("--offline", choices=["none", "katex", "all"], default="none",
-                    help="katex=内联 KaTeX+Pico；all=再加 vis-network（需先跑 fetch_vendor.py）")
+    ap.add_argument("--offline", choices=["none", "katex", "all", "auto"], default="none",
+                    help="katex=公式+Pico；all=再加 vis-network；auto=按内容自动判定")
     ap.add_argument("--offline-mermaid", action="store_true", help="连 Mermaid 一起内联")
     args = ap.parse_args()
 
@@ -419,6 +419,14 @@ def main():
         if data is None:
             sys.exit(f"无法从 {b['companion']} 抽取数据；请确认该 HTML 由 build_companion.py 生成")
         nb = normalize_book(b["key"], data)
+        # 旧书自愈：单书 HTML 早于诊断页时，总入口补建诊断页，避免 #/book/x/diagnosis 报「页面不存在」
+        if "__diagnosis__" not in nb["rendered"] and (nb["manifest"].get("quizzes") or []):
+            try:
+                import build_companion as _bc
+                nb["rendered"]["__diagnosis__"] = _bc._render_diagnosis_page(nb["manifest"])
+                print(f"  自愈：{b['key']} 补建诊断页")
+            except Exception as e:
+                print(f"  警告：{b['key']} 诊断页补建失败：{e}", file=sys.stderr)
         payload_books[b["key"]] = {
             "manifest": nb["manifest"],
             "rendered": nb["rendered"],
@@ -493,18 +501,26 @@ def main():
                                             "quote": c.get("quote", ""), "zh": c.get("zh", "")}
     html = html.replace("__SOURCES__", dump(sources))
 
-    if args.offline in ("katex", "all"):
-        parts = [vendor_assets.katex_css(), vendor_assets.pico_css(), vendor_assets.katex_js()]
-        if args.offline == "all":
-            parts.append(vendor_assets.vis_js())
-        if args.offline_mermaid:
-            parts.append(vendor_assets.mermaid_js())
-        blob = "\n".join(x for x in parts if x)
+    mode = args.offline
+    if mode == "auto":
+        has_math = bool(re.search(r'class=\\*"katex-(?:inline|block)', html))
+        has_graph = len(books) > 0
+        mode = "all" if (has_math and has_graph) else ("katex" if has_math else ("all" if has_graph else "none"))
+        print(f"自动内联判定：公式 {'有' if has_math else '无'} · 图谱 {'有' if has_graph else '无'} → {mode}")
+
+    if args.offline != "none":
+        html = html.replace('<html lang="zh-CN"', f'<html lang="zh-CN" data-offline="{mode}"', 1)
+    want_katex = mode in ("katex", "all")
+    want_graph = mode in ("all",)
+    if want_katex or want_graph:
+        blob = vendor_assets.bundle(katex=want_katex, pico=True, vis=want_graph, mermaid=args.offline_mermaid)
         if blob.strip():
             html = vendor_assets.strip_cdn_links(html)
             html = html.replace("</head>", blob + "\n</head>", 1)
         else:
             print("警告：assets/vendor 为空，先跑 python3 scripts/fetch_vendor.py", file=sys.stderr)
+    if args.offline != "none":
+        html = html.replace("<head>", "<head>\n<script>const ZHISHU_OFFLINE = true;</script>", 1)
 
     out_path = args.out or os.path.join(root, "index.html")
     with open(out_path, "w", encoding="utf-8") as f:
@@ -714,7 +730,7 @@ function stKey(book,k){ return 'hb:'+book+':'+k; }
 function getState(book){
   return { visited: store.get(stKey(book,'visited'))||[], quiz: store.get(stKey(book,'quiz'))||{}, cards: store.get(stKey(book,'cards'))||{} };
 }
-const ZS_VERSION = '1.8.0';
+const ZS_VERSION = '1.9.0';
 /* ---------- 进度导出 / 导入（跨设备） ---------- */
 function exportProgress(){
   const data = {};
@@ -1294,6 +1310,7 @@ let mermaidState='idle';
 function renderMermaid(){
   const els=Array.from(document.querySelectorAll('.mermaid')).filter(el=>!el.dataset.rendered);
   if(!els.length) return;
+  if(typeof ZHISHU_OFFLINE !== 'undefined' && ZHISHU_OFFLINE && typeof mermaid === 'undefined') return;
   const run=()=>{ try{
     mermaid.initialize({startOnLoad:false, theme:document.body.dataset.theme==='dark'?'dark':'default'});
     els.forEach((el,idx)=>{ try{
@@ -1306,7 +1323,7 @@ function renderMermaid(){
   if(window.mermaid){ run(); return; }
   if(mermaidState==='loading') return;
   mermaidState='loading';
-  if(typeof mermaid !== 'undefined'){ boot(); return; }
+  if(typeof mermaid !== 'undefined'){ run(); return; }
   const urls=['https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js',
               'https://registry.npmmirror.com/mermaid/10.9.1/files/dist/mermaid.min.js',
               'https://unpkg.com/mermaid@10.9.1/dist/mermaid.min.js'];
@@ -1361,6 +1378,7 @@ window.addEventListener('hashchange', route);
 let katexLoading=false, katexReady=false;
 function renderMath(){
   if(!document.querySelector('.katex-inline, .katex-block')) return;
+  if(typeof ZHISHU_OFFLINE !== 'undefined' && ZHISHU_OFFLINE && typeof katex === 'undefined') return;
   if(typeof katex !== 'undefined'){ doRenderMath(); return; }
   if(katexReady){ doRenderMath(); return; }
   if(katexLoading) return;
